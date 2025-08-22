@@ -1,0 +1,101 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: wishlist_db
+      POSTGRES_USER: wishlist_user
+      POSTGRES_PASSWORD: wishlist_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wishlist_user -d wishlist_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # User Service
+  user-service:
+    build:
+      context: ../apps/user-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      JWT_SECRET: dev_super_secret_change_me
+      PORT: 3001
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Wishlist Service
+  wishlist-service:
+    build:
+      context: ../apps/wishlist-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      PORT: 3002
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Collaboration Service
+  collaboration-service:
+    build:
+      context: ../apps/collaboration-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      WISHLIST_SVC_URL: http://wishlist-service:3002
+      PORT: 3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wishlist-service:
+        condition: service_started
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../apps/api-gateway
+      dockerfile: Dockerfile
+    environment:
+      JWT_SECRET: dev_super_secret_change_me
+      USER_SVC_URL: http://user-service:3001
+      WISHLIST_SVC_URL: http://wishlist-service:3002
+      COLLAB_SVC_URL: http://collaboration-service:3003
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      user-service:
+        condition: service_started
+      wishlist-service:
+        condition: service_started
+      collaboration-service:
+        condition: service_started
+
+  # Web Frontend
+  web-frontend:
+    build:
+      context: ../apps/web-frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+volumes:
+  postgres_data: 
