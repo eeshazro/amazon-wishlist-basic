@@ -187,4 +187,4 @@ This project is licensed under the MIT License.
 
 ---
 
-**Ready to learn?** Start with this basic version and gradually add advanced features as you become comfortable with the architecture! 
+**Ready to learn?** Start with this basic version and gradually add advanced features as you become comfortable with the architecture! # amazon-wishlist-basic
