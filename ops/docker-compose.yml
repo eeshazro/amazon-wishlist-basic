@@ -3,16 +3,16 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_DB: wishlist_db
-      POSTGRES_USER: wishlist_user
-      POSTGRES_PASSWORD: wishlist_pass
+      POSTGRES_DB: postgres_database
+      POSTGRES_USER: postgres_username
+      POSTGRES_PASSWORD: postgres_password
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../db/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wishlist_user -d wishlist_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres_username -d postgres_database"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,7 +23,7 @@ services:
       context: ../apps/user-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      DATABASE_URL: postgresql://postgres_username:postgres_password@postgres:5432/postgres_database
       JWT_SECRET: dev_super_secret_change_me
       PORT: 3001
     ports:
@@ -38,7 +38,7 @@ services:
       context: ../apps/wishlist-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      DATABASE_URL: postgresql://postgres_username:postgres_password@postgres:5432/postgres_database
       PORT: 3002
     ports:
       - "3002:3002"
@@ -52,7 +52,7 @@ services:
       context: ../apps/collaboration-service
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://wishlist_user:wishlist_pass@postgres:5432/wishlist_db
+      DATABASE_URL: postgresql://postgres_username:postgres_password@postgres:5432/postgres_database
       WISHLIST_SVC_URL: http://wishlist-service:3002
       PORT: 3003
     ports:
@@ -97,5 +97,23 @@ services:
       api-gateway:
         condition: service_started
 
+  # pgAdmin - PostgreSQL Administration Tool
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@wishlist.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
-  postgres_data: 
+  postgres_data:
+  pgadmin_data: 
