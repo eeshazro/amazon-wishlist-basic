@@ -1,0 +1,19 @@
+{
+  "name": "mock-services",
+  "version": "1.0.0",
+  "description": "Mock external services for wishlist development",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "keywords": ["mock", "api", "services", "wishlist"],
+  "author": "Wishlist Team",
+  "license": "MIT"
+}

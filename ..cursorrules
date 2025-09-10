@@ -1,0 +1,14 @@
+rules:
+  # Product specification rule
+  - requires: ["./docs/product_spec.md"]
+    prompt: |
+      Always reference `./docs/product_spec.md` for product features, user stories,
+      and acceptance criteria. Use this when deciding *what* to build or how a feature
+      should behave from the product perspective.
+
+  # Technical specification rule
+  - requires: ["./docs/tech_spec.md"]
+    prompt: |
+      Always reference `./docs/tech_spec.md` for implementation details, architecture,
+      and code-level requirements. Use this when deciding *how* to build the features
+      or what technical changes are needed.

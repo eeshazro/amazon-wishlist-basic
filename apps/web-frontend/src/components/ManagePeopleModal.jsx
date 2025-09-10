@@ -36,15 +36,25 @@ export default function ManagePeopleModal({ open, onClose, auth, id, onChanged }
 		maxHeight: '85vh',
 		background: '#fff',
 		borderRadius: '10px',
-		padding: '16px',
-		overflow: 'auto',
-		boxShadow: '0 10px 30px rgba(0,0,0,.25)'
+		overflow: 'hidden',
+		boxShadow: '0 10px 30px rgba(0,0,0,.25)',
+		display: 'flex',
+		flexDirection: 'column'
 	};
 	const header = {
 		display: 'flex',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		marginBottom: '12px'
+		padding: '16px',
+		background: '#f7fafa',
+		borderBottom: '1px solid var(--amz-line)',
+		flexShrink: 0
+	};
+	const content = {
+		padding: '16px',
+		overflowY: 'auto',
+		flex: 1,
+		minHeight: 0
 	};
 
 	const removeUser = async (userId) => {
@@ -77,45 +87,47 @@ export default function ManagePeopleModal({ open, onClose, auth, id, onChanged }
 					<button className="a-button" onClick={onClose} aria-label="Close">✕</button>
 				</div>
 
-				{error && <div className="a-alert mb-12">Error: {error}</div>}
+				<div style={content}>
+					{error && <div className="a-alert mb-12">Error: {error}</div>}
 
-				<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-					{rows.map(r => {
-						const display = r.name || r.display_name || r.user?.public_name || `User ${r.user_id}`;
-						const isOwner = r.role === 'owner';
-						return (
-							<div key={`${r.user_id}-${r.role}-${display}`} className="row" style={{ justifyContent: 'space-between' }}>
-								<div className="row" style={{ gap: 10 }}>
-									<div className="avatar" aria-hidden>
-										{r.user?.icon_url ? <img src={r.user.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} /> : (
-											<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-												<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-											</svg>
+					<div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+						{rows.map(r => {
+							const display = r.name || r.display_name || r.user?.public_name || `User ${r.user_id}`;
+							const isOwner = r.role === 'owner';
+							return (
+								<div key={`${r.user_id}-${r.role}-${display}`} className="row" style={{ justifyContent: 'space-between' }}>
+									<div className="row" style={{ gap: 10 }}>
+										<div className="avatar" aria-hidden>
+											{r.user?.icon_url ? <img src={r.user.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} /> : (
+												<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+													<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+												</svg>
+											)}
+										</div>
+										<div>
+											<div style={{ fontWeight: 600 }}>{display}</div>
+										</div>
+									</div>
+									<div className="row" style={{ gap: 10, alignItems: 'center' }}>
+										<span className="badge">{isOwner ? 'Owner' : 'View Only'}</span>
+										{!isOwner && (
+											<button
+												className="a-button a-button-small"
+												onClick={() => removeUser(r.user_id)}
+												disabled={busyId === r.user_id}
+												aria-label={`Remove ${display}`}
+											>{busyId === r.user_id ? 'Removing…' : '✕'}</button>
 										)}
 									</div>
-									<div>
-										<div style={{ fontWeight: 600 }}>{display}</div>
-									</div>
 								</div>
-								<div className="row" style={{ gap: 10, alignItems: 'center' }}>
-									<span className="badge">{isOwner ? 'Owner' : 'View Only'}</span>
-									{!isOwner && (
-										<button
-											className="a-button a-button-small"
-											onClick={() => removeUser(r.user_id)}
-											disabled={busyId === r.user_id}
-											aria-label={`Remove ${display}`}
-										>{busyId === r.user_id ? 'Removing…' : '✕'}</button>
-									)}
-								</div>
-							</div>
-						);
-					})}
-					{!rows.length && <div className="a-muted">No collaborators yet.</div>}
-				</div>
+							);
+						})}
+						{!rows.length && <div className="a-muted">No collaborators yet.</div>}
+					</div>
 
-				<div className="row mt-12" style={{ justifyContent: 'flex-end', gap: 8 }}>
-					<button className="a-button" onClick={onClose}>Done</button>
+					<div className="row mt-12" style={{ justifyContent: 'flex-end', gap: 8 }}>
+						<button className="a-button" onClick={onClose}>Done</button>
+					</div>
 				</div>
 			</div>
 		</div>

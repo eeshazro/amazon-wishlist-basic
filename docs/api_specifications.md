@@ -1,74 +1,160 @@
-# API Specifications - Basic Version
+# API Specifications - Amazon Collaborative Wishlist
 
-## Overview
-This document describes the API endpoints for the Amazon Wishlist system with basic sharing features including view-only invitations and user management, but without comments or advanced collaboration.
+This document provides comprehensive API documentation for the Amazon Collaborative Wishlist system. The architecture uses microservices with API calls to external services, simulating the real Amazon work environment.
 
-## Base URLs
-- **API Gateway**: `http://localhost:3000`
-- **User Service**: `http://localhost:3001`
-- **Wishlist Service**: `http://localhost:3002`
-- **Collaboration Service**: `http://localhost:3003`
+## 🏗️ Architecture Overview
 
----
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Web Frontend  │    │   API Gateway   │    │  Mock Services  │
+│   (React/Vite)  │◄──►│   (Express.js)  │◄──►│  (User + Product│
+└─────────────────┘    └─────────────────┘    │   APIs)         │
+│                              │              └─────────────────┘
+│                              ▼
+│                       ┌─────────────────┐
+│                       │ Wishlist Service│
+│                       │   (Your Code)   │
+│                       │  (API Calls)    │
+│                       └─────────────────┘
+│                              │
+│                              ▼
+│                       ┌─────────────────┐
+│                       │   PostgreSQL    │
+│                       │   (Your DB)     │
+│                       └─────────────────┘
+```
 
-## User Service API
+## 🔐 Authentication
 
-### Authentication
-All endpoints require authentication via JWT token in Authorization header:
+All API endpoints require JWT authentication via the `Authorization` header:
+
 ```
 Authorization: Bearer <jwt_token>
 ```
 
-### Endpoints
+JWT tokens are obtained from the mock user service login endpoint.
 
-#### `GET /api/users/profile`
-Get current user's profile information.
+## 📡 API Gateway Endpoints
+
+The API Gateway (Port 8080) serves as the central entry point and handles authentication, routing, and data enrichment.
+
+### Authentication Endpoints
+
+#### POST /auth/login
+Login to get a JWT token.
+
+**Request:**
+```json
+{
+  "user": "alice"
+}
+```
+
+**Response:**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+#### GET /api/me
+Get current user information.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
 
 **Response:**
 ```json
 {
   "id": 1,
-  "public_name": "John Doe",
-  "icon_url": "https://example.com/avatar.jpg",
-  "created_at": "2024-01-15T10:30:00Z"
+  "username": "alice",
+  "public_name": "Alice Johnson",
+  "email": "alice@example.com"
 }
 ```
 
-#### `PUT /api/users/profile`
-Update current user's profile.
+### User Endpoints
 
-**Request Body:**
-```json
-{
-  "public_name": "John Doe",
-  "icon_url": "https://example.com/avatar.jpg"
-}
+#### GET /api/users/:id
+Get user information by ID.
+
+**Headers:**
 ```
-
-#### `GET /api/users/:userId`
-Get user profile by ID.
+Authorization: Bearer <jwt_token>
+```
 
 **Response:**
 ```json
 {
   "id": 1,
-  "public_name": "John Doe",
-  "icon_url": "https://example.com/avatar.jpg",
-  "created_at": "2024-01-15T10:30:00Z"
+  "username": "alice",
+  "public_name": "Alice Johnson",
+  "email": "alice@example.com"
 }
 ```
 
----
+### Product Endpoints
 
-## Wishlist Service API
+#### GET /products
+Get all products (paginated).
 
-### Endpoints
+**Response:**
+```json
+{
+  "products": [
+    {
+      "id": 1,
+      "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+      "description": "Industry-leading noise canceling with Dual Noise Sensor technology",
+      "price": 349.99,
+      "currency": "USD",
+      "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
+      "category": "Electronics",
+      "retailer": "Best Buy",
+      "rating": 4.5,
+      "review_count": 2847,
+      "availability": "in_stock",
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "total": 20,
+  "limit": 50,
+  "offset": 0
+}
+```
 
-#### `GET /api/wishlists`
-Get all wishlists for current user (owned and shared).
+#### GET /products/:id
+Get product details by ID.
 
-**Query Parameters:**
-- `type`: `owned` | `shared` | `all` (default: `all`)
+**Response:**
+```json
+{
+  "id": 1,
+  "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+  "description": "Industry-leading noise canceling with Dual Noise Sensor technology",
+  "price": 349.99,
+  "currency": "USD",
+  "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
+  "category": "Electronics",
+  "retailer": "Best Buy",
+  "rating": 4.5,
+  "review_count": 2847,
+  "availability": "in_stock",
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+### Wishlist Endpoints
+
+#### GET /api/wishlists
+Get all wishlists for the current user.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
 
 **Response:**
 ```json
@@ -76,31 +162,46 @@ Get all wishlists for current user (owned and shared).
   {
     "id": 1,
     "name": "Birthday Wishlist",
+    "description": "Things I want for my birthday",
     "owner_id": 1,
-    "privacy": "shared",
-    "created_at": "2024-01-15T10:30:00Z",
-    "owner": {
-      "id": 1,
-      "public_name": "John Doe",
-      "icon_url": "https://example.com/avatar.jpg"
-    },
-    "access": {
-      "role": "owner",
-      "display_name": "John Doe"
-    }
+    "created_at": "2024-01-01T00:00:00Z",
+    "items": [
+      {
+        "id": 1,
+        "product_id": 1,
+        "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+        "priority": 1,
+        "added_by": 1,
+        "created_at": "2024-01-01T00:00:00Z",
+        "product": {
+          "id": 1,
+          "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+          "price": 349.99,
+          "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop"
+        }
+      }
+    ],
+    "access": [
+      {
+        "user_id": 2,
+        "role": "view_only",
+        "display_name": "Bob Smith",
+        "user": {
+          "id": 2,
+          "public_name": "Bob Smith"
+        }
+      }
+    ]
   }
 ]
 ```
 
-#### `POST /api/wishlists`
-Create a new wishlist.
+#### GET /api/wishlists/:id
+Get a specific wishlist by ID.
 
-**Request Body:**
-```json
-{
-  "name": "Birthday Wishlist",
-  "privacy": "private"
-}
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
@@ -108,305 +209,593 @@ Create a new wishlist.
 {
   "id": 1,
   "name": "Birthday Wishlist",
+  "description": "Things I want for my birthday",
   "owner_id": 1,
-  "privacy": "private",
-  "created_at": "2024-01-15T10:30:00Z"
-}
-```
-
-#### `GET /api/wishlists/:wishlistId`
-Get wishlist details by ID.
-
-**Response:**
-```json
-{
-  "id": 1,
-  "name": "Birthday Wishlist",
-  "owner_id": 1,
-  "privacy": "shared",
-  "created_at": "2024-01-15T10:30:00Z",
-  "owner": {
-    "id": 1,
-    "public_name": "John Doe",
-    "icon_url": "https://example.com/avatar.jpg"
-  },
-  "access": {
-    "role": "view_only",
-    "display_name": "John Doe"
-  },
+  "created_at": "2024-01-01T00:00:00Z",
   "items": [
     {
       "id": 1,
-      "product_id": 123,
-      "title": "Wireless Headphones",
+      "product_id": 1,
+      "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
       "priority": 1,
-      "comments": "High quality sound",
       "added_by": 1,
-      "created_at": "2024-01-15T10:30:00Z",
-      "added_by_user": {
+      "created_at": "2024-01-01T00:00:00Z",
+      "product": {
         "id": 1,
-        "public_name": "John Doe",
-        "icon_url": "https://example.com/avatar.jpg"
+        "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+        "price": 349.99,
+        "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop"
+      }
+    }
+  ],
+  "access": [
+    {
+      "user_id": 2,
+      "role": "view_only",
+      "display_name": "Bob Smith",
+      "user": {
+        "id": 2,
+        "public_name": "Bob Smith"
       }
     }
   ]
 }
 ```
 
-#### `PUT /api/wishlists/:wishlistId`
-Update wishlist details.
+#### POST /api/wishlists
+Create a new wishlist.
 
-**Request Body:**
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+**Request:**
 ```json
 {
-  "name": "Updated Wishlist Name",
-  "privacy": "public"
+  "name": "Holiday Wishlist",
+  "description": "Things I want for the holidays"
 }
 ```
 
-#### `DELETE /api/wishlists/:wishlistId`
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "Holiday Wishlist",
+  "description": "Things I want for the holidays",
+  "owner_id": 1,
+  "created_at": "2024-01-01T00:00:00Z",
+  "items": [],
+  "access": []
+}
+```
+
+#### PUT /api/wishlists/:id
+Update a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "name": "Updated Birthday Wishlist",
+  "description": "Updated description"
+}
+```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "name": "Updated Birthday Wishlist",
+  "description": "Updated description",
+  "owner_id": 1,
+  "created_at": "2024-01-01T00:00:00Z",
+  "items": [...],
+  "access": [...]
+}
+```
+
+#### DELETE /api/wishlists/:id
 Delete a wishlist.
 
-#### `POST /api/wishlists/:wishlistId/items`
-Add item to wishlist.
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
 
-**Request Body:**
+**Response:**
+```
+204 No Content
+```
+
+### Wishlist Item Endpoints
+
+#### POST /api/wishlists/:id/items
+Add an item to a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+**Request:**
 ```json
 {
-  "product_id": 123,
-  "title": "Wireless Headphones",
+  "product_id": 1,
+  "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+  "priority": 1
+}
+```
+
+**Response:**
+```json
+{
+  "id": 2,
+  "product_id": 1,
+  "wishlist_id": 1,
+  "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
   "priority": 1,
-  "comments": "High quality sound"
+  "added_by": 1,
+  "created_at": "2024-01-01T00:00:00Z"
 }
 ```
 
-#### `PUT /api/wishlists/:wishlistId/items/:itemId`
-Update wishlist item.
+#### DELETE /api/wishlists/:id/items/:itemId
+Remove an item from a wishlist.
 
-**Request Body:**
-```json
-{
-  "title": "Updated Item Title",
-  "priority": 2,
-  "comments": "Updated comments"
-}
+**Headers:**
 ```
-
-#### `DELETE /api/wishlists/:wishlistId/items/:itemId`
-Remove item from wishlist.
-
----
-
-## Collaboration Service API
-
-### Endpoints
-
-#### `POST /api/collab/wishlists/:wishlistId/invites`
-Create invitation for wishlist (view-only only).
-
-**Request Body:**
-```json
-{
-  "expires_in_hours": 168
-}
+Authorization: Bearer <jwt_token>
 ```
 
 **Response:**
-```json
-{
-  "id": 1,
-  "wishlist_id": 1,
-  "token": "abc123def456",
-  "expires_at": "2024-01-22T10:30:00Z"
-}
+```
+204 No Content
 ```
 
-#### `GET /api/collab/invites/:token`
-Get invitation details by token.
+### Collaboration Endpoints
 
-**Response:**
-```json
-{
-  "id": 1,
-  "wishlist_id": 1,
-  "token": "abc123def456",
-  "expires_at": "2024-01-22T10:30:00Z",
-  "wishlist": {
-    "id": 1,
-    "name": "Birthday Wishlist",
-    "owner": {
-      "id": 1,
-      "public_name": "John Doe"
-    }
-  }
-}
+#### GET /api/wishlists/friends
+Get wishlists shared with the current user.
+
+**Headers:**
 ```
-
-#### `POST /api/collab/invites/:token/accept`
-Accept invitation.
-
-**Request Body:**
-```json
-{
-  "display_name": "Jane Smith"
-}
+Authorization: Bearer <jwt_token>
 ```
-
-**Response:**
-```json
-{
-  "wishlist_id": 1,
-  "user_id": 2,
-  "role": "view_only",
-  "display_name": "Jane Smith"
-}
-```
-
-#### `GET /api/collab/wishlists/:wishlistId/access`
-Get all users with access to wishlist (for Manage People modal).
 
 **Response:**
 ```json
 [
   {
-    "wishlist_id": 1,
-    "user_id": 1,
-    "role": "owner",
-    "invited_by": null,
-    "invited_at": "2024-01-15T10:30:00Z",
-    "display_name": "John Doe",
-    "user": {
-      "id": 1,
-      "public_name": "John Doe",
-      "icon_url": "https://example.com/avatar.jpg"
-    }
-  },
+    "id": 3,
+    "name": "Bob's Birthday List",
+    "description": "Bob's birthday wishlist",
+    "owner_id": 2,
+    "created_at": "2024-01-01T00:00:00Z",
+    "items": [...],
+    "access": [...],
+    "role": "view_only"
+  }
+]
+```
+
+#### POST /api/wishlists/:id/invites
+Create an invitation for a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{
+  "access_type": "view_only"
+}
+```
+
+**Response:**
+```json
+{
+  "token": "DMTTLZ4Gl6E9he_gRG9OsxMjVKyKBGmp",
+  "inviteLink": "http://localhost:5173/wishlist/friends/invite/DMTTLZ4Gl6E9he_gRG9OsxMjVKyKBGmp",
+  "expires_at": "2024-01-08T00:00:00Z"
+}
+```
+
+#### POST /api/invites/:token/accept
+Accept an invitation.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+```
+
+**Request:**
+```json
+{}
+```
+
+**Response:**
+```json
+{
+  "message": "Invitation accepted successfully",
+  "wishlist_id": 1,
+  "access_type": "view_only"
+}
+```
+
+#### GET /api/wishlists/:id/access
+Get list of collaborators for a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+[
   {
-    "wishlist_id": 1,
     "user_id": 2,
     "role": "view_only",
-    "invited_by": 1,
-    "invited_at": "2024-01-16T10:30:00Z",
-    "display_name": "Jane Smith",
+    "display_name": "Bob Smith",
     "user": {
       "id": 2,
-      "public_name": "Jane Smith",
-      "icon_url": "https://example.com/avatar2.jpg"
+      "public_name": "Bob Smith"
     }
   }
 ]
 ```
 
-#### `DELETE /api/collab/wishlists/:wishlistId/access/:userId`
-Remove user access to wishlist.
+#### DELETE /api/wishlists/:id/access/:userId
+Remove user access from a wishlist.
 
-#### `PUT /api/collab/wishlists/:wishlistId/access/:userId`
-Update user's display name in wishlist.
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
 
-**Request Body:**
+**Response:**
+```
+204 No Content
+```
+
+## 🔧 Mock Services Endpoints
+
+The mock services (Port 3004) simulate external teams' services.
+
+### User Service Endpoints
+
+#### POST /auth/login
+Login endpoint for development.
+
+**Request:**
 ```json
 {
-  "display_name": "Updated Name"
+  "user": "alice"
 }
 ```
 
----
+**Response:**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
 
-## Public Wishlist API
+#### GET /me
+Get current user information.
 
-### Endpoints
-
-#### `GET /api/public/wishlists/:wishlistId`
-Get public wishlist (no authentication required).
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+```
 
 **Response:**
 ```json
 {
   "id": 1,
-  "name": "Birthday Wishlist",
-  "privacy": "public",
-  "created_at": "2024-01-15T10:30:00Z",
-  "owner": {
-    "id": 1,
-    "public_name": "John Doe",
-    "icon_url": "https://example.com/avatar.jpg"
-  },
-  "items": [
-    {
-      "id": 1,
-      "product_id": 123,
-      "title": "Wireless Headphones",
-      "priority": 1,
-      "comments": "High quality sound",
-      "added_by": 1,
-      "created_at": "2024-01-15T10:30:00Z"
-    }
-  ]
+  "username": "alice",
+  "public_name": "Alice Johnson",
+  "email": "alice@example.com"
 }
 ```
 
----
+#### GET /users/:id
+Get user by ID.
 
-## Error Responses
+**Response:**
+```json
+{
+  "id": 1,
+  "username": "alice",
+  "public_name": "Alice Johnson",
+  "email": "alice@example.com"
+}
+```
 
-All endpoints return consistent error responses:
+### Product Service Endpoints
+
+#### GET /products
+Get all products.
+
+**Response:**
+```json
+{
+  "products": [...],
+  "total": 20,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### GET /products/:id
+Get product by ID.
+
+**Response:**
+```json
+{
+  "id": 1,
+  "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+  "description": "Industry-leading noise canceling with Dual Noise Sensor technology",
+  "price": 349.99,
+  "currency": "USD",
+  "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
+  "category": "Electronics",
+  "retailer": "Best Buy",
+  "rating": 4.5,
+  "review_count": 2847,
+  "availability": "in_stock",
+  "created_at": "2024-01-01T00:00:00Z"
+}
+```
+
+## 🚀 Wishlist Service Endpoints
+
+The wishlist service (Port 3002) is your team's service that makes API calls to external services.
+
+### Internal Endpoints (Called by API Gateway)
+
+#### GET /wishlists
+Get all wishlists for a user.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### GET /wishlists/:id
+Get a specific wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### POST /wishlists
+Create a new wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+Content-Type: application/json
+```
+
+#### PUT /wishlists/:id
+Update a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+Content-Type: application/json
+```
+
+#### DELETE /wishlists/:id
+Delete a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### POST /wishlists/:id/items
+Add an item to a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+Content-Type: application/json
+```
+
+#### DELETE /wishlists/:id/items/:itemId
+Remove an item from a wishlist.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### GET /access/mine
+Get wishlists shared with the current user.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### POST /wishlists/:id/invites
+Create an invitation.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+Content-Type: application/json
+```
+
+#### POST /invites/:token/accept
+Accept an invitation.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+Content-Type: application/json
+```
+
+#### GET /wishlists/:id/access
+Get wishlist collaborators.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+#### DELETE /wishlists/:id/access/:userId
+Remove user access.
+
+**Headers:**
+```
+Authorization: Bearer <jwt_token>
+x-user-id: 1
+```
+
+## 🔄 Data Flow Examples
+
+### 1. Getting a Wishlist with Items
+
+```
+Frontend → API Gateway → Wishlist Service → Database
+                ↓
+         Wishlist Service → Product Service (API call)
+                ↓
+         Wishlist Service → User Service (API call)
+                ↓
+         API Gateway → Frontend (enriched data)
+```
+
+### 2. Adding an Item to Wishlist
+
+```
+Frontend → API Gateway → Wishlist Service → Database
+                ↓
+         Wishlist Service → Product Service (API call for validation)
+                ↓
+         API Gateway → Frontend (success response)
+```
+
+### 3. Accepting an Invitation
+
+```
+Frontend → API Gateway → Wishlist Service → Database
+                ↓
+         Wishlist Service → User Service (API call for user validation)
+                ↓
+         API Gateway → Frontend (success response)
+```
+
+## 🚨 Error Handling
+
+### Common Error Responses
+
+#### 401 Unauthorized
+```json
+{
+  "error": "Unauthorized"
+}
+```
+
+#### 403 Forbidden
+```json
+{
+  "error": "only owner can view access list"
+}
+```
+
+#### 404 Not Found
+```json
+{
+  "error": "wishlist not found"
+}
+```
+
+#### 500 Internal Server Error
+```json
+{
+  "error": "Wishlist service unavailable"
+}
+```
+
+### External Service Errors
+
+When external services are unavailable, the system gracefully degrades:
 
 ```json
 {
-  "error": "Error message",
-  "code": "ERROR_CODE",
-  "details": {}
+  "id": 1,
+  "title": "Sony WH-1000XM4 Wireless Noise Canceling Headphones",
+  "product": null,  // Product service unavailable
+  "added_by": 1,
+  "user": {
+    "id": 1,
+    "public_name": "Unknown User"  // User service unavailable
+  }
 }
 ```
 
-### Common Error Codes
-- `UNAUTHORIZED`: Authentication required
-- `FORBIDDEN`: Insufficient permissions
-- `NOT_FOUND`: Resource not found
-- `VALIDATION_ERROR`: Invalid request data
-- `INVITE_EXPIRED`: Invitation token expired
-- `INVITE_INVALID`: Invalid invitation token
+## 🔧 Development Notes
 
----
+### Service Dependencies
 
-## Access Control
+- **Wishlist Service** depends on **User Service** and **Product Service**
+- **API Gateway** depends on **Wishlist Service** and **Mock Services**
+- **Frontend** depends on **API Gateway**
 
-### Roles
-- **owner**: Full access (create, read, update, delete, manage users)
-- **view_only**: Can view items only (no editing, no commenting)
+### Data Enrichment
 
-### Permission Matrix
+The wishlist service enriches data by making HTTP calls to external services:
 
-| Action | owner | view_only |
-|--------|-------|-----------|
-| View wishlist | ✅ | ✅ |
-| Edit wishlist details | ✅ | ❌ |
-| Add items | ✅ | ❌ |
-| Edit items | ✅ | ❌ |
-| Delete items | ✅ | ❌ |
-| Manage users | ✅ | ❌ |
-| Delete wishlist | ✅ | ❌ |
+```javascript
+// Example: Enriching wishlist items with product data
+const enrichedItems = await Promise.all(
+  items.map(async (item) => {
+    try {
+      const product = await productServiceClient.getProductById(item.product_id);
+      return { ...item, product };
+    } catch (error) {
+      console.error('Product service unavailable:', error);
+      return { ...item, product: null };
+    }
+  })
+);
+```
 
----
+### Authentication Flow
 
-## Key Differences from Full Version
+1. User logs in via `/auth/login`
+2. Receives JWT token
+3. Token is passed in `Authorization` header for all requests
+4. API Gateway validates token and extracts user ID
+5. User ID is passed to wishlist service via `x-user-id` header
 
-### Missing Features
-- **No Comments API**: No `POST /api/collab/items/:itemId/comments` endpoint
-- **No Comment Management**: No `GET` or `DELETE` comment endpoints
-- **No Role Management**: Cannot change user roles (all invites are view-only)
-- **No Access Type**: No `access_type` field in invitation creation
-
-### Simplified Workflow
-1. Owner creates wishlist
-2. Owner generates invitation token (view-only only)
-3. User accepts invitation and gets view-only access
-4. Owner can manage users via modal (view and remove only)
-5. No commenting or editing by invited users
-
-### Manage People Modal
-- Shows list of users with access
-- Owner can remove users from access
-- Owner can update display names
-- No role management (all users are view-only)
-- No ability to add new collaborators directly 
+This architecture simulates the real Amazon work environment where teams own their services and make API calls to other teams' services.

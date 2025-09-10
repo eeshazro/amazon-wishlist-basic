@@ -9,38 +9,61 @@ import WishlistView from './pages/WishlistView';
 import InviteAccept from './pages/InviteAccept';
 import AmazonHeader from './components/AmazonHeader';
 import AmazonFooter from './components/AmazonFooter';
+import ErrorBoundary from './components/ErrorBoundary';
 import { API } from './lib/api';
 
 // Component to redirect to first wishlist
 function WishlistRedirect({ auth }) {
   const [lists, setLists] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
     if (!auth.token) {
       setLoading(false);
+      setError(null);
       return;
     }
     
     fetch(`${API}/api/wishlists/mine`, { 
       headers: { authorization: `Bearer ${auth.token}` } 
     })
-      .then(r => r.json())
-      .then(lists => {
-        setLists(lists);
-        setLoading(false);
+      .then(r => {
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        return r.json();
       })
-      .catch(() => {
+      .then(data => {
+        // Ensure we always set an array
+        if (Array.isArray(data)) {
+          setLists(data);
+        } else {
+          console.warn('API returned non-array response:', data);
+          setLists([]);
+        }
+        setError(null);
+      })
+      .catch(err => {
+        console.error('Failed to fetch wishlists:', err);
+        setError(err.message);
+        setLists([]);
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, [auth.token]);
 
-  if (loading) {
+  if (loading || auth.isValidating) {
     return <div className="a-container">Loading…</div>;
   }
 
-  if (!auth.token) {
+  if (!auth.token && !auth.isValidating) {
     return <div className="a-container">Log in to continue.</div>;
+  }
+
+  if (error) {
+    return <MyLists auth={auth} />;
   }
 
   // If there are lists, redirect to the first one
@@ -56,32 +79,54 @@ function WishlistRedirect({ auth }) {
 function FriendsWishlistRedirect({ auth }) {
   const [lists, setLists] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
 
   React.useEffect(() => {
     if (!auth.token) {
       setLoading(false);
+      setError(null);
       return;
     }
     
     fetch(`${API}/api/wishlists/friends`, { 
       headers: { authorization: `Bearer ${auth.token}` } 
     })
-      .then(r => r.json())
-      .then(lists => {
-        setLists(lists);
-        setLoading(false);
+      .then(r => {
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        return r.json();
       })
-      .catch(() => {
+      .then(data => {
+        // Ensure we always set an array
+        if (Array.isArray(data)) {
+          setLists(data);
+        } else {
+          console.warn('API returned non-array response:', data);
+          setLists([]);
+        }
+        setError(null);
+      })
+      .catch(err => {
+        console.error('Failed to fetch friends wishlists:', err);
+        setError(err.message);
+        setLists([]);
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, [auth.token]);
 
-  if (loading) {
+  if (loading || auth.isValidating) {
     return <div className="a-container">Loading…</div>;
   }
 
-  if (!auth.token) {
+  if (!auth.token && !auth.isValidating) {
     return <div className="a-container">Log in to continue.</div>;
+  }
+
+  if (error) {
+    return <FriendsLists auth={auth} />;
   }
 
   // If there are friend lists, redirect to the first one using the friends route
@@ -96,10 +141,15 @@ function FriendsWishlistRedirect({ auth }) {
 export default function App(){
   const auth = useAuth();
   return (
-    <>
+    <ErrorBoundary>
       <AmazonHeader auth={auth} cartCount={1} />
       <main style={{ minHeight: 'calc(100vh - 200px)' }}>
-        <Routes>
+        <Routes
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
           <Route path="/" element={<WishlistRedirect auth={auth} />} />
           <Route path="/wishlist" element={<WishlistRedirect auth={auth} />} />
           <Route path="/wishlist/friends" element={<FriendsWishlistRedirect auth={auth} />} />
@@ -110,6 +160,6 @@ export default function App(){
         </Routes>
       </main>
       <AmazonFooter />
-    </>
+    </ErrorBoundary>
   );
 }

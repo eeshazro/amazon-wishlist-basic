@@ -73,23 +73,60 @@ import LeftNav from '../components/LeftNav';
 
 export default function MyLists({auth}){
   const [lists,setLists] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
 
   React.useEffect(()=>{
-    if(!auth.token) return;
+    if(!auth.token) {
+      setLists([]);
+      setError(null);
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
     fetch(`${API}/api/wishlists/mine`, { headers:{ authorization:`Bearer ${auth.token}` } })
-      .then(r=>r.json()).then(setLists);
+      .then(r => {
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+        }
+        return r.json();
+      })
+      .then(data => {
+        // Ensure we always set an array, even if the response is not an array
+        if (Array.isArray(data)) {
+          setLists(data);
+        } else {
+          console.warn('API returned non-array response:', data);
+          setLists([]);
+        }
+        setError(null);
+      })
+      .catch(err => {
+        console.error('Failed to fetch wishlists:', err);
+        setError(err.message);
+        setLists([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   },[auth.token]);
 
   return (
     <div className="a-container">
-      {!auth.token && <div className="a-alert">Log in to continue.</div>}
-      {auth.token &&
+      {!auth.token && !auth.isValidating && <div className="a-alert">Log in to continue.</div>}
+      {auth.isValidating && <div className="a-alert">Validating authentication...</div>}
+      {auth.token && !auth.isValidating && (
         <div className="wl-layout">
           <LeftNav lists={lists} />
           <div>
             <div className="wl-header">
               <div className="wl-titlebar">Your Lists</div>
             </div>
+
+            {loading && <div className="a-alert">Loading your lists...</div>}
+            {error && <div className="a-alert a-alert-error">Error loading lists: {error}</div>}
 
             <div className="control-bar">
               <div className="search">
@@ -102,7 +139,10 @@ export default function MyLists({auth}){
             </div>
 
             <div className="items-grid">
-              {lists.map(l=>(
+              {!loading && !error && lists.length === 0 && (
+                <div className="a-alert">You don't have any wishlists yet. Create one to get started!</div>
+              )}
+              {!loading && !error && lists.map(l=>(
                 <div className="item-card" key={l.id}>
                   <div className="item-title">{l.name}</div>
                   <div className="mt-8"><span className="badge">{l.privacy}</span></div>
@@ -113,7 +153,8 @@ export default function MyLists({auth}){
               ))}
             </div>
           </div>
-        </div>}
+        </div>
+      )}
     </div>
   );
 }

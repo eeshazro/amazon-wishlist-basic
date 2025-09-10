@@ -1,305 +1,484 @@
-// API Gateway - Central entry point for all client requests
-// This service handles authentication, routing, and orchestration between microservices
-// It acts as a reverse proxy and provides a unified API interface
+// API Gateway - API Calls Version
+// This version makes HTTP calls to external services (mock services)
+// Simulates the real Amazon environment where you call other teams' APIs
 
 import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import fetch from 'node-fetch';
-import fs from 'fs';
-import path from 'path';
-import url from 'url';
 
 // Initialize Express application
 const app = express();
-app.use(cors()); // Enable CORS for cross-origin requests
-app.use(express.json()); // Parse JSON request bodies
+app.use(cors());
+app.use(express.json());
 
-// Set up __dirname for ES modules compatibility
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+// Configuration
+const PORT = process.env.PORT || 8080;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev_super_secret_change_me';
+const MOCK_SERVICES_URL = process.env.MOCK_SERVICES_URL || 'http://mock-services:3004';
+const WISHLIST_URL = process.env.WISHLIST_SVC_URL || 'http://wishlist-service:3002';
 
-// Configuration - Environment variables with sensible defaults
-const PORT = process.env.PORT || 8080; // Default gateway port
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_super_secret_change_me'; // JWT signing secret
-const USER_URL = process.env.USER_SVC_URL || 'http://user-service:3001'; // User service URL
-const WISHLIST_URL = process.env.WISHLIST_SVC_URL || 'http://wishlist-service:3002'; // Wishlist service URL
-const COLLAB_URL = process.env.COLLAB_SVC_URL || 'http://collaboration-service:3003'; // Collaboration service URL
-
-// Load product catalog from JSON file (static data)
-const products = JSON.parse(fs.readFileSync(path.join(__dirname, 'products/products.json'), 'utf-8'));
-
-// Authentication middleware - validates JWT tokens for protected routes
-function auth(req,res,next){
+// Authentication middleware
+function auth(req, res, next) {
   // Allow public routes without authentication
-  if (req.path.startsWith('/products')) return next();          // Product catalog is public
-  if (req.path.startsWith('/auth/login')) return next();        // Login endpoint is public
-  if (req.method === 'GET' && req.path.startsWith('/api/invites/')) return next(); // Invite preview is public
+  if (req.path === '/health') return next();
+  if (req.path.startsWith('/products')) return next();
+  if (req.path.startsWith('/categories')) return next();
+  if (req.path.startsWith('/auth/login')) return next();
+  if (req.method === 'GET' && req.path.startsWith('/api/invites/')) return next();
 
   // Extract and validate JWT token
-  const auth = req.headers.authorization||'';
+  const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if(!token) return res.status(401).json({error:'missing token'});
-  try{
+  if (!token) return res.status(401).json({ error: 'missing token' });
+  
+  try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = { id: payload.sub, name: payload.name }; // Attach user info to request
+    req.user = { id: payload.sub, name: payload.name };
     return next();
-  }catch(e){ return res.status(401).json({error:'invalid token'}); }
+  } catch (e) {
+    return res.status(401).json({ error: 'invalid token' });
+  }
 }
+
+// Health check endpoint (before auth middleware)
+app.get('/health', (req, res) => res.json({ ok: true, service: 'api-gateway' }));
 
 // Apply authentication middleware to all routes
 app.use(auth);
 
-// Health check endpoint
-app.get('/health', (req,res)=>res.json({ok:true, service:'api-gateway'}));
-
-// Async route wrapper - ensures thrown errors are caught by Express error handler
+// Async route wrapper
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
-// Global error handling - prevent unhandled promise rejections from crashing the app
-process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED_REJECTION', err);
-});
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT_EXCEPTION', err);
-  // Do NOT process.exit() in dev; let Docker restart if it really dies.
-});
-
-// Express error handler middleware - handles all errors thrown in routes
-function errorHandler(err, req, res, next) {
+// Global error handling
+app.use((err, req, res, next) => {
   console.error('GATEWAY_ERROR', err);
-  const status = err.status || 502; // Default to 502 Bad Gateway for downstream errors
-  let message = err.message || 'Internal error';
-  // If the downstream sent JSON, it might be a stringified JSON; try to parse to extract {error:...}
-  try {
-    const parsed = JSON.parse(message);
-    message = parsed.error || message;
-  } catch (_) {}
-  res.status(status).json({ error: message });
-}
-
-// ---- Products API (public, served from JSON file) ----
-// GET /products - Return all products from the catalog
-app.get('/products', (req, res) => {
-  res.json(products);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-// GET /products/:id - Return a specific product by ID
-app.get('/products/:id', (req, res) => {
-  const p = products.find(p => p.id == req.params.id);
-  if (!p) return res.status(404).json({ error: 'not found' });
-  res.json(p);
-});
+// =============================================================================
+// AUTHENTICATION ROUTES (Proxy to mock services)
+// =============================================================================
 
-// ---- HTTP Client Helpers ----
-// Helper function for GET requests to downstream services
-async function jget(url, opts = {}) {
-  const r = await fetch(url, opts);
-  if (!r.ok) {
-    const t = await r.text();
-    const e = new Error(t || r.statusText);
-    e.status = r.status;
-    throw e;
-  }
-  return r.json();
-}
-
-// Helper function for POST requests to downstream services
-async function jpost(url, body, opts = {}) {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    const e = new Error(t || r.statusText);
-    e.status = r.status;
-    throw e;
-  }
-  return r.json();
-}
-
-// Helper function for DELETE requests to downstream services
-async function jdel(url, opts = {}) {
-  const r = await fetch(url, { method: 'DELETE', headers: (opts.headers || {}) });
-  if (!r.ok && r.status !== 204) {
-    const t = await r.text();
-    const e = new Error(t || r.statusText);
-    e.status = r.status;
-    throw e;
-  }
-  return true;
-}
-
-// ---- Authentication Routes ----
-// POST /auth/login - Proxy login request to user service
+// POST /auth/login - Proxy to mock services
 app.post('/auth/login', wrap(async (req, res) => {
-  const r = await fetch(`${USER_URL}/auth/login`, {
-    method:'POST',
-    headers:{'content-type':'application/json'},
-    body: JSON.stringify(req.body)
-  });
-  const data = await r.json();
-  res.status(r.status).json(data);
-}));
-
-// GET /api/me - Get current user profile
-app.get('/api/me', wrap(async (req,res)=>{
-  const r = await fetch(`${USER_URL}/me`, { headers:{ authorization: req.headers.authorization } });
-  const data = await r.json();
-  res.status(r.status).json(data);
-}));
-
-// ---- Wishlist Routes ----
-// GET /api/wishlists/mine - Get current user's own wishlists
-app.get('/api/wishlists/mine', wrap(async (req,res)=>{
-  const data = await jget(`${WISHLIST_URL}/wishlists/mine`, { headers: { 'x-user-id': req.user.id } });
-  res.json(data);
-}));
-
-// GET /api/wishlists/friends - Get wishlists shared with current user
-app.get('/api/wishlists/friends', wrap(async (req,res)=>{
-  // Get user's access to shared wishlists
-  const access = await jget(`${COLLAB_URL}/access/mine`, { headers: { 'x-user-id': req.user.id } });
-  const ids = access.map(a=>a.wishlist_id);
-  if(ids.length===0) return res.json([]);
-  
-  // Fetch wishlist details and enrich with user's role
-  const lists = await jget(`${WISHLIST_URL}/wishlists/byIds?ids=${ids.join(',')}`, { headers: { 'x-user-id': req.user.id } });
-  const roleById = Object.fromEntries(access.map(a=>[a.wishlist_id,a.role]));
-  res.json(lists.map(l=>({...l, role: roleById[l.id]})));
-}));
-
-// GET /api/wishlists/:id - Get specific wishlist with items and user's role
-app.get('/api/wishlists/:id', wrap(async (req,res)=>{
-  // Fetch wishlist and items
-  const w = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}`);
-  const items = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}/items`);
-  
-  // Enrich items with product information
-  const outItems = items.map(it=>({ ...it, product: products.find(p=>p.id==it.product_id) }));
-  
-  // Determine user's role (owner, collaborator, or none)
-  let role = 'owner';
-  if (w.owner_id !== req.user.id){
-    const access = await jget(`${COLLAB_URL}/access/mine`, { headers: { 'x-user-id': req.user.id } });
-    const me = access.find(a=>a.wishlist_id == w.id);
-    role = me ? me.role : 'none';
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Login proxy error:', error);
+    res.status(500).json({ error: 'Login service unavailable' });
   }
-  res.json({ wishlist: w, items: outItems, role });
 }));
 
-// POST /api/wishlists - Create a new wishlist
-app.post('/api/wishlists', wrap(async (req,res)=>{
-  const w = await jpost(`${WISHLIST_URL}/wishlists`, req.body, { headers: { 'x-user-id': req.user.id, 'content-type':'application/json' } });
-  res.status(201).json(w);
+// =============================================================================
+// PRODUCT ROUTES (Proxy to mock services)
+// =============================================================================
+
+// GET /products - Proxy to mock services
+app.get('/products', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/products`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Products proxy error:', error);
+    res.status(500).json({ error: 'Product service unavailable' });
+  }
+}));
+
+// GET /products/:id - Proxy to mock services
+app.get('/products/:id', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/products/${req.params.id}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Product detail proxy error:', error);
+    res.status(500).json({ error: 'Product service unavailable' });
+  }
+}));
+
+// GET /categories - Proxy to mock services
+app.get('/categories', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/categories`);
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Categories proxy error:', error);
+    res.status(500).json({ error: 'Product service unavailable' });
+  }
+}));
+
+// =============================================================================
+// WISHLIST ROUTES (Proxy to wishlist service with data enrichment)
+// =============================================================================
+
+// GET /api/wishlists/mine - Get user's wishlists
+app.get('/api/wishlists/mine', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/mine`, {
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (!response.ok) {
+      return res.status(response.status).json(await response.json());
+    }
+    
+    const wishlists = await response.json();
+    res.json(wishlists);
+  } catch (error) {
+    console.error('Wishlists proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// GET /api/wishlists/friends - Get user's access to shared wishlists
+app.get('/api/wishlists/friends', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/access/mine`, {
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (!response.ok) {
+      return res.status(response.status).json(await response.json());
+    }
+    
+    const accessList = await response.json();
+    
+    // Get the actual wishlists for each access record
+    const wishlistIds = accessList.map(access => access.wishlist_id);
+    if (wishlistIds.length === 0) {
+      return res.json([]);
+    }
+    
+    const wishlistsResponse = await fetch(`${WISHLIST_URL}/wishlists/byIds?ids=${wishlistIds.join(',')}`, {
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (!wishlistsResponse.ok) {
+      return res.status(wishlistsResponse.status).json(await wishlistsResponse.json());
+    }
+    
+    const wishlists = await wishlistsResponse.json();
+    
+    // Enrich wishlists with access role information
+    const enrichedWishlists = wishlists.map(wishlist => {
+      const access = accessList.find(a => a.wishlist_id === wishlist.id);
+      return {
+        ...wishlist,
+        role: access ? access.role : 'view_only'
+      };
+    });
+    
+    res.json(enrichedWishlists);
+  } catch (error) {
+    console.error('Friends wishlists proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// GET /api/wishlists/:id/access - Get wishlist access list
+app.get('/api/wishlists/:id/access', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/access`, {
+      method: 'GET',
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Get access list proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// DELETE /api/wishlists/:id/access/:userId - Remove user access
+app.delete('/api/wishlists/:id/access/:userId', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/access/${req.params.userId}`, {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (response.status === 204) {
+      res.status(204).end();
+    } else {
+      const data = await response.json();
+      res.status(response.status).json(data);
+    }
+  } catch (error) {
+    console.error('Remove access proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// GET /api/wishlists/:id - Get specific wishlist
+app.get('/api/wishlists/:id', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}`, {
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (!response.ok) {
+      return res.status(response.status).json(await response.json());
+    }
+    
+    const wishlist = await response.json();
+    res.json(wishlist);
+  } catch (error) {
+    console.error('Wishlist detail proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// GET /api/wishlists/:id/items - Get wishlist items with product enrichment
+app.get('/api/wishlists/:id/items', wrap(async (req, res) => {
+  try {
+    // Get wishlist items from wishlist service
+    const itemsResponse = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/items`, {
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (!itemsResponse.ok) {
+      return res.status(itemsResponse.status).json(await itemsResponse.json());
+    }
+    
+    const items = await itemsResponse.json();
+    
+    // Enrich items with product data from mock services
+    const enrichedItems = await Promise.all(items.map(async (item) => {
+      try {
+        const productResponse = await fetch(`${MOCK_SERVICES_URL}/products/${item.product_id}`);
+        if (productResponse.ok) {
+          const product = await productResponse.json();
+          return { ...item, product };
+        } else {
+          console.error(`Product not found: ${item.product_id}`);
+          return { ...item, product: { id: item.product_id, title: 'Product not found' } };
+        }
+      } catch (error) {
+        console.error(`Error fetching product ${item.product_id}:`, error);
+        return { ...item, product: { id: item.product_id, title: 'Product unavailable' } };
+      }
+    }));
+    
+    res.json(enrichedItems);
+  } catch (error) {
+    console.error('Wishlist items proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
+}));
+
+// POST /api/wishlists - Create new wishlist
+app.post('/api/wishlists', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Create wishlist proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
 }));
 
 // POST /api/wishlists/:id/items - Add item to wishlist
-app.post('/api/wishlists/:id/items', wrap(async (req,res)=>{
-  const wishlistId = req.params.id;
-  
-  // Check if user can edit this wishlist (only owners in basic version)
-  const w = await jget(`${WISHLIST_URL}/wishlists/${wishlistId}`);
-  if (w.owner_id !== req.user.id) {
-    return res.status(403).json({error: 'insufficient permissions - only owners can add items in basic version'});
+app.post('/api/wishlists/:id/items', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/items`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Add item proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
   }
-  
-  const it = await jpost(`${WISHLIST_URL}/wishlists/${wishlistId}/items`, req.body, { headers: { 'x-user-id': req.user.id, 'content-type':'application/json' } });
-  res.status(201).json(it);
 }));
 
 // DELETE /api/wishlists/:id/items/:itemId - Remove item from wishlist
-app.delete('/api/wishlists/:id/items/:itemId', wrap(async (req,res)=>{
-  const wishlistId = req.params.id;
-  
-  // Check if user can edit this wishlist (only owners in basic version)
-  const w = await jget(`${WISHLIST_URL}/wishlists/${wishlistId}`);
-  if (w.owner_id !== req.user.id) {
-    return res.status(403).json({error: 'insufficient permissions - only owners can delete items in basic version'});
-  }
-  
-  await jdel(`${WISHLIST_URL}/wishlists/${wishlistId}/items/${req.params.itemId}`, { headers: { 'x-user-id': req.user.id } });
-  res.status(204).end();
-}));
-
-// ---- Collaboration Routes ----
-// GET /api/wishlists/:id/access - Get list of collaborators (owner only)
-app.get('/api/wishlists/:id/access', wrap(async (req,res)=>{
-  // Verify user is the owner
-  const w = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}`);
-  if (w.owner_id !== req.user.id) return res.status(403).json({error:'owner required'});
-
-  // Get access list from collaboration service
-  const access = await jget(`${COLLAB_URL}/wishlists/${req.params.id}/access`, { headers: { 'x-owner-id': req.user.id } });
-
-  // Enrich with user directory names/icons
-  const ids = Array.from(new Set([w.owner_id, ...access.map(a => a.user_id)]));
-  let users = [];
+app.delete('/api/wishlists/:id/items/:itemId', wrap(async (req, res) => {
   try {
-    if (ids.length) {
-      const r = await jget(`${USER_URL}/users?ids=${ids.join(',')}`);
-      users = Array.isArray(r) ? r : (Array.isArray(r?.rows) ? r.rows : []);
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/items/${req.params.itemId}`, {
+      method: 'DELETE',
+      headers: { 
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      }
+    });
+    
+    if (response.status === 204) {
+      res.status(204).send();
+    } else {
+      const data = await response.json();
+      res.status(response.status).json(data);
     }
-  } catch (e) {
-    console.warn('User enrichment failed in access route:', e.message);
+  } catch (error) {
+    console.error('Remove item proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
   }
-  const byId = {};
-  for (const u of users) if (u && typeof u.id !== 'undefined') byId[u.id] = u;
-
-  // Return enriched access list with owner and collaborators
-  const out = [
-    { user_id: w.owner_id, role: 'owner', display_name: null, user: byId[w.owner_id] || { id: w.owner_id, public_name: `User ${w.owner_id}`, icon_url: null } },
-    ...access.map(a => ({
-      ...a,
-      user: byId[a.user_id] || { id: a.user_id, public_name: `User ${a.user_id}`, icon_url: null }
-    }))
-  ];
-  res.json(out);
 }));
 
-// DELETE /api/wishlists/:id/access/:userId - Remove collaborator (owner only)
-app.delete('/api/wishlists/:id/access/:userId', wrap(async (req,res)=>{
-  const w = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}`);
-  if (w.owner_id !== req.user.id) return res.status(403).json({error:'owner required'});
-  await jdel(`${COLLAB_URL}/wishlists/${req.params.id}/access/${req.params.userId}`);
-  res.status(204).end();
+// =============================================================================
+// USER ROUTES (Proxy to mock services)
+// =============================================================================
+
+// GET /api/me - Get current user profile
+app.get('/api/me', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/me`, {
+      headers: { 'Authorization': req.headers.authorization }
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: 'Mock service error', details: text });
+    }
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Current user profile proxy error:', error);
+    res.status(500).json({ error: 'User service unavailable' });
+  }
 }));
 
-// PUT /api/wishlists/:id/access/:userId - Update collaborator display name (owner only)
-app.put('/api/wishlists/:id/access/:userId', wrap(async (req,res)=>{
-  const w = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}`);
-  if (w.owner_id !== req.user.id) return res.status(403).json({error:'owner required'});
-  const data = await jpost(`${COLLAB_URL}/wishlists/${req.params.id}/access/${req.params.userId}`, req.body, { 
-    headers: { 'x-owner-id': req.user.id, 'content-type': 'application/json' } 
-  });
-  res.json(data);
+// GET /api/users/:id - Get user profile
+app.get('/api/users/:id', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${MOCK_SERVICES_URL}/users/${req.params.id}`, {
+      headers: { 'Authorization': req.headers.authorization }
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('User profile proxy error:', error);
+    res.status(500).json({ error: 'User service unavailable' });
+  }
 }));
 
-// ---- Invitation Routes ----
-// POST /api/wishlists/:id/invites - Create invitation link (owner only)
-app.post('/api/wishlists/:id/invites', wrap(async (req,res)=>{
-  const w = await jget(`${WISHLIST_URL}/wishlists/${req.params.id}`);
-  if (w.owner_id !== req.user.id) return res.status(403).json({error:'owner required'});
-  const data = await jpost(`${COLLAB_URL}/wishlists/${req.params.id}/invites`, {}, { headers: { 'content-type':'application/json' } });
-  res.status(201).json({ ...data, inviteLink: `http://localhost:5173/wishlist/friends/invite/${data.token}` });
+// =============================================================================
+// INVITE ROUTES (Proxy to wishlist service)
+// =============================================================================
+
+// POST /api/wishlists/:id/invites - Create an invitation for a wishlist
+app.post('/api/wishlists/:id/invites', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/invites`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    const data = await response.json();
+    
+    // If successful, create the invite link
+    if (response.ok && data.token) {
+      // Generate invite link for the frontend (port 5173)
+      const frontendHost = req.get('host').replace(':8080', ':5173');
+      const inviteLink = `${req.protocol}://${frontendHost}/wishlist/friends/invite/${data.token}`;
+      res.status(response.status).json({
+        ...data,
+        inviteLink: inviteLink
+      });
+    } else {
+      res.status(response.status).json(data);
+    }
+  } catch (error) {
+    console.error('Create invite proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
 }));
 
-// GET /api/invites/:token - Get invitation details (public)
-app.get('/api/invites/:token', wrap(async (req,res)=>{
-  const data = await jget(`${COLLAB_URL}/invites/${req.params.token}`);
-  res.json(data);
+// GET /api/invites/:token - Get invite details (public)
+app.get('/api/invites/:token', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/invites/${req.params.token}`);
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Invite details proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
 }));
 
-// POST /api/invites/:token/accept - Accept invitation
-app.post('/api/invites/:token/accept', wrap(async (req,res)=>{
-  const body = { display_name: (req.body.display_name || '').trim() || null };
-  const data = await jpost(`${COLLAB_URL}/invites/${req.params.token}/accept`, body, { headers: { 'x-user-id': req.user.id, 'content-type': 'application/json' } });
-  res.json(data);
+// POST /api/invites/:token/accept - Accept invite
+app.post('/api/invites/:token/accept', wrap(async (req, res) => {
+  try {
+    const response = await fetch(`${WISHLIST_URL}/invites/${req.params.token}/accept`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': req.headers.authorization,
+        'x-user-id': req.user.id.toString()
+      },
+      body: JSON.stringify(req.body)
+    });
+    
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('Accept invite proxy error:', error);
+    res.status(500).json({ error: 'Wishlist service unavailable' });
+  }
 }));
 
-// Register the error handler LAST (after all routes)
-app.use(errorHandler);
 
-// Start the server
-app.listen(PORT, ()=>console.log('api-gateway on', PORT));
+// =============================================================================
+// START SERVER
+// =============================================================================
+
+app.listen(PORT, () => {
+  console.log(`API Gateway (API Calls) running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/health`);
+});

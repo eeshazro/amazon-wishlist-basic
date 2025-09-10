@@ -135,15 +135,25 @@ export default function InviteModal({ open, onClose, auth, id }) {
     maxHeight: '85vh',
     background: '#fff',
     borderRadius: '10px',
-    padding: '16px',
-    overflow: 'auto',
-    boxShadow: '0 10px 30px rgba(0,0,0,.25)'
+    overflow: 'hidden',
+    boxShadow: '0 10px 30px rgba(0,0,0,.25)',
+    display: 'flex',
+    flexDirection: 'column'
   };
   const header = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: '12px'
+    padding: '16px',
+    background: '#f7fafa',
+    borderBottom: '1px solid var(--amz-line)',
+    flexShrink: 0
+  };
+  const content = {
+    padding: '16px',
+    overflowY: 'auto',
+    flex: 1,
+    minHeight: 0
   };
 
   const generate = async () => {
@@ -181,35 +191,37 @@ export default function InviteModal({ open, onClose, auth, id }) {
           <button className="a-button" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
-        <p className="a-muted" style={{ marginTop: 0 }}>
-          Create a share link and send it to friends so they can view this wishlist.
-        </p>
+        <div style={content}>
+          <p className="a-muted" style={{ marginTop: 0 }}>
+            Create a share link and send it to friends so they can view this wishlist.
+          </p>
 
-        {error && <div className="a-alert mb-12">Error: {error}</div>}
+          {error && <div className="a-alert mb-12">Error: {error}</div>}
 
-        <div className="invite-box mt-12">
-          <button className="a-button a-button-primary" onClick={generate} disabled={busy}>
-            {busy ? 'Generating…' : (link ? 'Regenerate link' : 'Generate invite link')}
-          </button>
-          {link && (
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <button 
-                className="clipboard-btn" 
-                onClick={copy}
-                title="Copy to clipboard"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                </svg>
-              </button>
-              <input className="a-input-text mono clipboard-input" readOnly value={link} />
-              {showCopied && (
-                <div className="link-copied-overlay">
-                  Link copied
-                </div>
-              )}
-            </div>
-          )}
+          <div className="invite-box mt-12">
+            <button className="a-button a-button-primary" onClick={generate} disabled={busy}>
+              {busy ? 'Generating…' : (link ? 'Regenerate link' : 'Generate invite link')}
+            </button>
+            {link && (
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <button 
+                  className="clipboard-btn" 
+                  onClick={copy}
+                  title="Copy to clipboard"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                  </svg>
+                </button>
+                <input className="a-input-text mono clipboard-input" readOnly value={link} />
+                {showCopied && (
+                  <div className="link-copied-overlay">
+                    Link copied
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

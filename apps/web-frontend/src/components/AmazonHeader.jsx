@@ -13,23 +13,37 @@ export default function AmazonHeader({
   const [showLoginDropdown, setShowLoginDropdown] = React.useState(false);
 
   const login = async (u)=>{
-    const r = await fetch(`${API}/auth/login`, {
-      method:'POST',
-      headers:{'content-type':'application/json'},
-      body: JSON.stringify({ user: u })
-    });
-    const data = await r.json();
-    if(data.accessToken){
-      localStorage.setItem('token', data.accessToken);
-      auth.setToken(data.accessToken);
-      setShowLoginDropdown(false);
-      // Add page refresh to clear cached data and reload with new user context
-      window.location.reload();
+    try {
+      const r = await fetch(`${API}/auth/login`, {
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        body: JSON.stringify({ user: u })
+      });
+      const data = await r.json();
+      if(data.accessToken){
+        // Clear any existing auth state first
+        auth.setToken('');
+        localStorage.removeItem('token');
+        
+        // Set new token
+        localStorage.setItem('token', data.accessToken);
+        auth.setToken(data.accessToken);
+        setShowLoginDropdown(false);
+        
+        // Add a small delay to ensure the token is set before reloading
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      } else {
+        console.error('Login failed: No access token received');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
     }
   };
 
   const currentUserName = auth.me ? auth.me.public_name : 'Eesha';
-  const isLoggedIn = !!auth.me;
+  const isLoggedIn = !!auth.me && !auth.isValidating;
 
   return (
     <>

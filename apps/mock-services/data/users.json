@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "username": "alice",
+    "public_name": "Alice Johnson",
+    "icon_url": "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-15T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "username": "bob",
+    "public_name": "Bob Smith",
+    "icon_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-16T14:20:00Z"
+  },
+  {
+    "id": 3,
+    "username": "carol",
+    "public_name": "Carol Davis",
+    "icon_url": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-17T09:15:00Z"
+  },
+  {
+    "id": 4,
+    "username": "dave",
+    "public_name": "Dave Wilson",
+    "icon_url": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-18T16:45:00Z"
+  },
+  {
+    "id": 5,
+    "username": "eve",
+    "public_name": "Eve Brown",
+    "icon_url": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-19T11:30:00Z"
+  },
+  {
+    "id": 6,
+    "username": "frank",
+    "public_name": "Frank Miller",
+    "icon_url": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
+    "created_at": "2024-01-20T13:20:00Z"
+  }
+]

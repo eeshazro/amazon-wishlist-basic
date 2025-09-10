@@ -2,7 +2,6 @@ import React from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { API } from '../lib/api';
 import LeftNav from '../components/LeftNav';
-import ShareButton from '../components/ShareButton';
 import AddItemModal from '../components/AddItemModal';
 import InviteModal from '../components/InviteModal';
 import ManagePeopleModal from '../components/ManagePeopleModal';
@@ -20,6 +19,7 @@ export default function WishlistView({auth}){
   const [showInvite,setShowInvite] = React.useState(false);
   const [showManage,setShowManage] = React.useState(false);
   const [collabs,setCollabs] = React.useState([]);
+  const [isLoadingUserLists, setIsLoadingUserLists] = React.useState(true);
   
   // Track current user to force re-render when user changes
   const currentUserRef = React.useRef(auth.me?.public_name);
@@ -36,6 +36,7 @@ export default function WishlistView({auth}){
       setMyLists([]);
       setFriendLists([]);
       setCollabs([]);
+      setIsLoadingUserLists(true);
       
       // Force a small delay to ensure state is cleared before any new fetches
       setTimeout(() => {
@@ -46,7 +47,10 @@ export default function WishlistView({auth}){
 
   // Fetch user's lists and redirect if needed
   React.useEffect(() => {
-    if (!auth.token || !auth.me?.public_name) return;
+    if (!auth.token || !auth.me?.public_name) {
+      setIsLoadingUserLists(false);
+      return;
+    }
     
     console.log('Fetching user lists for:', auth.me?.public_name);
     
@@ -55,17 +59,20 @@ export default function WishlistView({auth}){
       fetch(`${API}/api/wishlists/mine`, { headers:{ authorization:`Bearer ${auth.token}` } }).then(r=>r.json()),
       fetch(`${API}/api/wishlists/friends`, { headers:{ authorization:`Bearer ${auth.token}` } }).then(r=>r.json())
     ]).then(([myListsData, friendListsData]) => {
+      console.log('Received user lists - myLists:', myListsData, 'friendLists:', friendListsData);
       setMyLists(myListsData);
       setFriendLists(friendListsData);
       
       // Check if current wishlist is accessible to this user
       const allAccessibleLists = [...myListsData, ...friendListsData];
       const currentWishlistAccessible = allAccessibleLists.some(list => list.id == id);
+      console.log('Current wishlist ID:', id, 'Accessible lists:', allAccessibleLists.map(l => l.id), 'Current accessible:', currentWishlistAccessible);
       
       // If current wishlist is not accessible, redirect to user's first own wishlist
       if (!currentWishlistAccessible && myListsData.length > 0) {
         console.log('Current wishlist not accessible, redirecting to first own wishlist:', myListsData[0].id);
         navigate(`/wishlist/${myListsData[0].id}`);
+        setIsLoadingUserLists(false);
         return;
       }
       
@@ -73,6 +80,7 @@ export default function WishlistView({auth}){
       if (myListsData.length === 0 && friendListsData.length > 0) {
         console.log('No own wishlists, redirecting to first friend wishlist:', friendListsData[0].id);
         navigate(`/wishlist/friends/${friendListsData[0].id}`);
+        setIsLoadingUserLists(false);
         return;
       }
       
@@ -80,14 +88,51 @@ export default function WishlistView({auth}){
       if (allAccessibleLists.length === 0) {
         console.log('No accessible wishlists, redirecting to default view');
         navigate('/wishlist');
+        setIsLoadingUserLists(false);
         return;
       }
+      
+      // Mark user lists as loaded - now it's safe to fetch wishlist data
+      console.log('User lists loaded, setting isLoadingUserLists to false');
+      setIsLoadingUserLists(false);
+    }).catch(err => {
+      console.error('Failed to fetch user lists:', err);
+      setIsLoadingUserLists(false);
     });
   }, [auth.token, auth.me?.public_name, navigate, id]);
 
-  // Fetch wishlist data - only run if we have a user and token
+  // Handle tab state when user changes - redirect to correct tab based on role
+  
+  React.useEffect(() => {
+    if (!auth.token || !auth.me?.public_name || !data) return;
+    
+    const isFriendsRoute = location.pathname.startsWith('/wishlist/friends');
+    const isOwner = data.role === 'owner';
+    
+    console.log('Tab state check - isFriendsRoute:', isFriendsRoute, 'isOwner:', isOwner, 'role:', data.role);
+    
+    // If user is not owner but we're on a non-friends route, redirect to friends route
+    if (!isOwner && !isFriendsRoute) {
+      console.log('User is not owner, redirecting to friends route');
+      navigate(`/wishlist/friends/${id}`, { replace: true });
+      return;
+    }
+    
+    // If user is owner but we're on friends route, redirect to regular route
+    if (isOwner && isFriendsRoute) {
+      console.log('User is owner, redirecting to regular route');
+      navigate(`/wishlist/${id}`, { replace: true });
+      return;
+    }
+  }, [data?.role, auth.me?.public_name, location.pathname, navigate, id]);
+
+  // Fetch wishlist data - only run if we have a user, token, and user lists are loaded
   React.useEffect(()=>{
-    if(!auth.token || !auth.me?.public_name) return;
+    console.log('Wishlist data effect triggered - isLoadingUserLists:', isLoadingUserLists, 'auth.token:', !!auth.token, 'auth.me:', auth.me?.public_name);
+    if(!auth.token || !auth.me?.public_name || isLoadingUserLists) {
+      console.log('Skipping wishlist data fetch - conditions not met');
+      return;
+    }
     console.log('Fetching wishlist data for user:', auth.me?.public_name, 'wishlist ID:', id);
     
     fetch(`${API}/api/wishlists/${id}`, { headers:{ authorization:`Bearer ${auth.token}` } })
@@ -108,8 +153,8 @@ export default function WishlistView({auth}){
         console.error('Failed to fetch wishlist:', err);
         setData(null);
       });
-    fetch(`${API}/products`).then(r=>r.json()).then(setProducts);
-  },[id,auth.token,auth.me?.public_name]);
+    fetch(`${API}/products`).then(r=>r.json()).then(data => setProducts(data.products || []));
+  },[id,auth.token,auth.me?.public_name,isLoadingUserLists]);
 
   React.useEffect(()=>{
     if(!auth.token) return;
@@ -159,7 +204,7 @@ export default function WishlistView({auth}){
     }));
   };
 
-  if(!data) return <div className="a-container">Loading…</div>;
+  if(!data || isLoadingUserLists) return <div className="a-container">Loading…</div>;
 
   // Simplified permissions for basic version
   const canAdd = (data.role==='owner');
@@ -185,10 +230,9 @@ export default function WishlistView({auth}){
     });
 
   // Determine which lists to show in the left sidebar
-  // If we're on a friends route (/wishlist/friends/:id), always show friend lists
-  // Otherwise, show my lists if user is owner, friend lists if not
+  // Always show the appropriate lists based on the current route
   const isFriendsRoute = location.pathname.startsWith('/wishlist/friends');
-  const leftLists = isFriendsRoute ? friendLists : (data?.role === 'owner' ? myLists : friendLists);
+  const leftLists = isFriendsRoute ? friendLists : myLists;
 
   return (
     <div className="a-container">
@@ -224,7 +268,6 @@ export default function WishlistView({auth}){
             </div>
             <div className="wl-controls">
               {canAdd && <button className="a-button a-button-primary" onClick={()=>setShowAdd(true)}>Add item</button>}
-              {(data.role==='owner') && <ShareButton auth={auth} id={id} />}
             </div>
           </div>
 

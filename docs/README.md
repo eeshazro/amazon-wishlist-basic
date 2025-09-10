@@ -1,49 +1,52 @@
-# Amazon Collaborative Wishlist - Basic Version Documentation
+# Amazon Collaborative Wishlist - Microservices Architecture Documentation
 
-Welcome to the comprehensive documentation for the **Basic Version** of the Amazon Collaborative Wishlist application. This documentation covers the simplified system architecture without advanced collaboration features like comments and role-based access control.
+Welcome to the comprehensive documentation for the **Amazon Collaborative Wishlist** application. This documentation covers a microservices architecture that simulates the real Amazon work environment, where the wishlist team owns only their service and makes HTTP API calls to other teams' services.
 
 ## 📚 Documentation Index
 
 ### 🏗️ Architecture Overview
-- **[01-api-gateway-basic.md](01-api-gateway-basic.md)** - API Gateway service documentation (basic version)
-- **[02-user-service-basic.md](02-user-service-basic.md)** - User authentication and profile management
-- **[03-wishlist-service-basic.md](03-wishlist-service-basic.md)** - Wishlist and item management
-- **[04-collaboration-service-basic.md](04-collaboration-service-basic.md)** - Basic sharing and invitations (view-only)
+- **[api_specifications.md](api_specifications.md)** - Complete API documentation with all endpoints
+- **[collaboration-guide.md](collaboration-guide.md)** - Guide for implementing advanced collaboration features
+- **[development-guide.md](development-guide.md)** - Development setup and contribution guide
+- **[tech_spec.md](tech_spec.md)** - Technical specifications and design decisions
+- **[product_spec.md](product_spec.md)** - Product requirements and features
 
-### 🗄️ Database Documentation
-- **[05-database-erd-basic.md](05-database-erd-basic.md)** - Simplified database schema (basic version)
+### 📊 Visual Documentation
+- **[architecture-diagram.md](architecture-diagram.md)** - Visual system architecture diagrams
+- **[system-flows.md](system-flows.md)** - Comprehensive flow diagrams for all operations
+- **[database-erd.md](database-erd.md)** - Complete database ERD with relationships and external references
 
 ## 🏛️ System Architecture
 
-The Basic Version of the Amazon Collaborative Wishlist application follows a **microservices architecture** with simplified collaboration features:
+The Amazon Collaborative Wishlist application follows a **microservices architecture with API calls** that simulates the real Amazon work environment:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Frontend  │    │   API Gateway   │    │  User Service   │
-│   (React/Vite)  │◄──►│   (Express.js)  │◄──►│   (Express.js)  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐    ┌─────────────────┐
-                       │ Wishlist Service│    │Collaboration Svc│
-                       │   (Express.js)  │◄──►│   (Express.js)  │
-                       └─────────────────┘    └─────────────────┘
-                              │
-                              ▼
-                       ┌─────────────────┐
-                       │   PostgreSQL    │
-                       │   Database      │
-                       └─────────────────┘
+│   Web Frontend  │    │   API Gateway   │    │  Mock Services  │
+│   (React/Vite)  │◄──►│   (Express.js)  │◄──►│  (User + Product│
+└─────────────────┘    └─────────────────┘    │   APIs)         │
+│                              │              └─────────────────┘
+│                              ▼
+│                       ┌─────────────────┐
+│                       │ Wishlist Service│
+│                       │   (Your Code)   │
+│                       │  (API Calls)    │
+│                       └─────────────────┘
+│                              │
+│                              ▼
+│                       ┌─────────────────┐
+│                       │   PostgreSQL    │
+│                       │   (Your DB)     │
+│                       └─────────────────┘
 ```
 
 ### Service Responsibilities
 
 | Service | Port | Responsibility |
 |---------|------|----------------|
-| **API Gateway** | 8080 | Central entry point, authentication, data enrichment |
-| **User Service** | 3001 | User authentication, profiles, JWT management |
-| **Wishlist Service** | 3002 | Wishlist and item CRUD operations |
-| **Collaboration Service** | 3003 | Basic sharing, invitations (view-only) |
+| **API Gateway** | 8080 | Central entry point, authentication, data enrichment, routing |
+| **Mock Services** | 3004 | Simulates external teams' services:<br/>• User authentication & profiles<br/>• Product catalog & search |
+| **Wishlist Service** | 3002 | **Your team's service:**<br/>• Makes HTTP API calls to external services<br/>• Owns wishlist data and operations<br/>• Handles collaboration features<br/>• Manages invitations & access control |
 
 ## 🔄 Data Flow
 
@@ -55,30 +58,33 @@ The Basic Version of the Amazon Collaborative Wishlist application follows a **m
 5. **API Gateway** enriches data from multiple services if needed
 6. **Frontend** receives complete response
 
-### Example: Viewing a Wishlist
+### Example: Viewing a Wishlist (Merged Architecture)
 ```
-Frontend → API Gateway → Wishlist Service (get wishlist)
+Frontend → API Gateway → Wishlist Service (get wishlist + user role + items)
                     ↓
-                Collaboration Service (get user role)
-                    ↓
-                Frontend (complete wishlist with items and role)
+                Frontend (complete wishlist with items, role, and permissions)
 ```
+
+**Key Improvement**: No cross-service calls needed for permission checks - everything handled within the unified wishlist service.
 
 ## 🗄️ Database Architecture
 
-The application uses **PostgreSQL** with **schema separation**:
+The application uses **PostgreSQL** with a **unified schema approach**:
 
-### Schemas
-- **`user`** - User management and profiles
-- **`wishlist`** - Wishlist and item data
-- **`collab`** - Basic collaboration and sharing
+### Database Structure
+- **`wishlistdb`** - Single database for all wishlist domain data
+- **`public` schema** - Main application tables (wishlist domain)
+- **`user` schema** - User management tables (for user service)
 
-### Key Tables
+### Key Tables (Public Schema)
+- `wishlist` - Wishlist containers with owner references
+- `wishlist_item` - Items within wishlists with product references
+- `wishlist_access` - User access permissions with role-based control
+- `wishlist_invite` - Invitation tokens with access type specification
+- `wishlist_comment` - Comments on wishlist items (infrastructure ready)
+
+### Key Tables (User Schema)
 - `user.user` - User accounts and profiles
-- `wishlist.wishlist` - Wishlist containers
-- `wishlist.wishlist_item` - Items within wishlists
-- `collab.wishlist_invite` - Invitation tokens (view-only)
-- `collab.wishlist_access` - User access permissions (view-only)
 
 ## 🔐 Security & Access Control
 
