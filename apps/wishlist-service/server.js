@@ -73,7 +73,7 @@ async function canEditWishlist(userId, wishlistId) {
     
     // Check if role allows editing
     const role = access.rows[0].role;
-    return role === 'view_edit' || role === 'owner';
+    return role === 'owner' || role === 'edit';
     
   } catch (e) {
     console.error('canEditWishlist check failed:', e);
@@ -321,7 +321,6 @@ app.get('/wishlists/:id/access', wrap(async (req, res) => {
 app.post('/wishlists/:id/invites', wrap(async (req, res) => {
   const uid = userId(req);
   const wishlistId = req.params.id;
-  const { access_type = 'view_only' } = req.body;
   
   // Check if user is owner
   const wishlist = await pool.query('SELECT owner_id FROM wishlist WHERE id=$1', [wishlistId]);
@@ -333,9 +332,9 @@ app.post('/wishlists/:id/invites', wrap(async (req, res) => {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
   
   const { rows } = await pool.query(`
-    INSERT INTO wishlist_invite (wishlist_id, token, access_type, expires_at, created_by)
-    VALUES ($1, $2, $3, $4, $5) RETURNING *
-  `, [wishlistId, token, access_type, expiresAt, uid]);
+    INSERT INTO wishlist_invite (wishlist_id, token, expires_at, created_by)
+    VALUES ($1, $2, $3, $4) RETURNING *
+  `, [wishlistId, token, expiresAt, uid]);
   
   res.status(201).json(rows[0]);
 }));
@@ -398,11 +397,11 @@ app.post('/invites/:token/accept', wrap(async (req, res) => {
     return res.status(400).json({ error: 'user already has access to this wishlist' });
   }
   
-  // Create access record
+  // Create access record (all invites are view_only by default)
   const { rows } = await pool.query(`
     INSERT INTO wishlist_access (wishlist_id, user_id, role, display_name)
     VALUES ($1, $2, $3, $4) RETURNING *
-  `, [inviteData.wishlist_id, uid, inviteData.access_type, display_name]);
+  `, [inviteData.wishlist_id, uid, 'view_only', display_name]);
   
   // Delete the invitation token
   await pool.query('DELETE FROM wishlist_invite WHERE token = $1', [req.params.token]);

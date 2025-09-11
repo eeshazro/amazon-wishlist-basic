@@ -21,8 +21,8 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Insert test wishlist access (collaboration)
 INSERT INTO wishlist_access (wishlist_id, user_id, role, display_name) VALUES
-(1, 1, 'view_edit', 'Alice Johnson'),
+(1, 1, 'view_only', 'Alice Johnson'),
 (1, 2, 'view_only', 'Bob Smith'),
-(2, 3, 'view_edit', 'Carol Davis'),
+(2, 3, 'view_only', 'Carol Davis'),
 (3, 1, 'view_only', 'Alice Johnson')
 ON CONFLICT (wishlist_id, user_id) DO NOTHING;

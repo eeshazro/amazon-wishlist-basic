@@ -1,0 +1,191 @@
+-- Seed data for Full Collaboration Features
+-- This file adds sample data to demonstrate the full collaborative wishlist system
+-- Run this after 04_migration.sql to populate the database with collaborative features
+
+-- Note: This assumes the basic seed data from 02_seed.sql is already present
+-- and that the migration in 04_migration.sql has been applied
+
+-- 1. Update existing wishlist_access records to use advanced roles
+-- Convert some view_only users to edit for demonstration
+UPDATE wishlist_access 
+SET role = 'edit' 
+WHERE wishlist_id = 1 AND user_id = 2; -- Bob gets edit access to Alice's Birthday list
+
+-- 2. Add more wishlist_access records with different roles
+INSERT INTO wishlist_access (wishlist_id, user_id, role, invited_by, display_name) VALUES
+-- Alice's Birthday list - more collaborators
+(1, 4, 'view_only', 1, 'Dave Wilson'), -- Dave can only view
+-- Christmas List - add some collaborators
+(2, 2, 'edit', 1, 'Bob Smith'), -- Bob can edit Alice's Christmas list
+(2, 3, 'view_only', 1, 'Carol Davis'), -- Carol can only view
+-- Home Office Setup - add collaborators
+(3, 1, 'edit', 2, 'Alice Johnson'), -- Alice can edit Bob's tech list
+(3, 3, 'edit', 2, 'Carol Davis'), -- Carol can edit Bob's list
+(3, 4, 'view_only', 2, 'Dave Wilson') -- Dave can view Bob's list
+ON CONFLICT (wishlist_id, user_id) DO NOTHING;
+
+-- 3. Update existing wishlist_invite records to include access_type
+-- Note: This will only work if there are existing invites, otherwise it's safe to skip
+UPDATE wishlist_invite 
+SET access_type = 'edit' 
+WHERE id IN (SELECT id FROM wishlist_invite LIMIT 1); -- Update first invite as example
+
+-- 4. Add sample wishlist_invite records with different access types
+INSERT INTO wishlist_invite (wishlist_id, token, access_type, expires_at, created_by) VALUES
+(1, 'ALICE_BDAY_EDIT_2024', 'edit', NOW() + INTERVAL '7 days', 1),
+(1, 'ALICE_BDAY_VIEW_2024', 'view_only', NOW() + INTERVAL '5 days', 1),
+(2, 'CHRISTMAS_VIEW_2024', 'view_only', NOW() + INTERVAL '10 days', 1),
+(3, 'TECH_EDIT_2024', 'edit', NOW() + INTERVAL '3 days', 2),
+(3, 'TECH_VIEW_2024', 'view_only', NOW() + INTERVAL '14 days', 2)
+ON CONFLICT (token) DO NOTHING;
+
+-- 5. Add sample comments on wishlist items
+INSERT INTO wishlist_comment (wishlist_item_id, user_id, content) VALUES
+-- Comments on Alice's Birthday list items
+(1, 2, 'These headphones are amazing! I have the same pair. Great choice! 🎧'),
+(1, 3, 'I heard the noise cancellation is incredible. Perfect for travel!'),
+(1, 4, 'The battery life on these is supposed to be 30 hours. That''s insane!'),
+(2, 2, 'Smart watches are so useful for fitness tracking. Which model is this?'),
+(2, 3, 'I love the health monitoring features on these!'),
+-- Comments on Christmas list items
+(3, 2, 'Coffee makers are essential! This one has great reviews.'),
+(3, 3, 'Perfect for the holiday season. Nothing beats fresh coffee! ☕'),
+-- Comments on Home Office Setup items
+(4, 1, 'Monitor arms are a game changer for desk organization!'),
+(4, 3, 'I need to get one of these for my setup too.'),
+(4, 4, 'The cable management on this one looks really clean.'),
+(5, 1, 'Gaming chairs are so comfortable for long work sessions!'),
+(5, 3, 'The lumbar support on these is supposed to be excellent.'),
+(5, 4, 'Worth the investment for anyone who sits at a desk all day!')
+ON CONFLICT DO NOTHING;
+
+-- 6. Add more wishlist items to demonstrate collaboration
+INSERT INTO wishlist_item (product_id, wishlist_id, title, priority, added_by) VALUES
+-- More items for Alice's Birthday list (added by collaborators)
+(15, 1, 'Wireless Charging Pad', 3, 2), -- Added by Bob
+(18, 1, 'Bluetooth Earbuds', 2, 3), -- Added by Carol
+-- More items for Christmas list
+(7, 2, 'Electric Kettle', 2, 2), -- Added by Bob
+(14, 2, 'Tea Infuser Set', 3, 3), -- Added by Carol
+-- More items for Home Office Setup
+(6, 3, 'Mechanical Keyboard', 1, 1), -- Added by Alice
+(13, 3, 'Desk Lamp', 2, 3), -- Added by Carol
+(19, 3, 'Webcam', 3, 4) -- Added by Dave
+ON CONFLICT (wishlist_id, product_id) DO NOTHING;
+
+-- 7. Add comments on the new items
+INSERT INTO wishlist_comment (wishlist_item_id, user_id, content) VALUES
+-- Comments on new Birthday list items
+(8, 1, 'Thanks Bob! I''ve been wanting a wireless charger for my phone.'),
+(8, 3, 'Wireless charging is so convenient. Great addition!'),
+(9, 1, 'Carol, these earbuds look perfect for workouts!'),
+(9, 2, 'The sound quality on these is supposed to be excellent.'),
+-- Comments on new Christmas list items
+(10, 1, 'Bob, this kettle will be perfect for morning tea!'),
+(10, 3, 'Electric kettles are so much faster than stovetop ones.'),
+(11, 1, 'Carol, I love the tea infuser set! So many different types.'),
+(11, 2, 'That''s a really nice gift idea. Very thoughtful!'),
+-- Comments on new Home Office items
+(12, 2, 'Alice, mechanical keyboards are the best for coding!'),
+(12, 3, 'The tactile feedback is so satisfying.'),
+(12, 4, 'I switched to mechanical and can''t go back!'),
+(13, 1, 'Carol, this lamp has great reviews for eye strain reduction.'),
+(13, 2, 'Good lighting is so important for long work sessions.'),
+(14, 1, 'Dave, this webcam has 4K quality! Perfect for video calls.'),
+(14, 2, 'The auto-focus feature on this one is really good.'),
+(14, 3, 'Great choice for remote work setup!')
+ON CONFLICT DO NOTHING;
+
+-- 8. Create a sample shared wishlist to demonstrate full collaboration
+INSERT INTO wishlist (id, name, owner_id, privacy) VALUES
+(4, 'Team Holiday Party Gifts', 2, 'shared') -- Bob owns this shared list
+ON CONFLICT (id) DO NOTHING;
+
+-- Add items to the shared list
+INSERT INTO wishlist_item (product_id, wishlist_id, title, priority, added_by) VALUES
+(20, 4, 'Gift Cards (Various)', 1, 2), -- Bob added
+(21, 4, 'Office Decorations', 2, 1), -- Alice added
+(22, 4, 'Snack Basket', 3, 3), -- Carol added
+(23, 4, 'Team Photo Frame', 2, 4) -- Dave added
+ON CONFLICT (wishlist_id, product_id) DO NOTHING;
+
+-- Add access permissions for the shared list
+INSERT INTO wishlist_access (wishlist_id, user_id, role, invited_by, display_name) VALUES
+(4, 2, 'owner', NULL, 'Bob Smith'), -- Bob is owner
+(4, 1, 'edit', 2, 'Alice Johnson'), -- Alice can edit
+(4, 3, 'edit', 2, 'Carol Davis'), -- Carol can edit
+(4, 4, 'view_only', 2, 'Dave Wilson') -- Dave can only view
+ON CONFLICT (wishlist_id, user_id) DO NOTHING;
+
+-- Add comments on shared list items
+INSERT INTO wishlist_comment (wishlist_item_id, user_id, content) VALUES
+(15, 1, 'Gift cards are always appreciated! Great idea Bob.'),
+(15, 3, 'I agree! People can get exactly what they want.'),
+(15, 4, 'Maybe we could do different amounts for different people?'),
+(16, 2, 'Alice, these decorations will make the office festive!'),
+(16, 3, 'I love the holiday theme. Very cheerful!'),
+(16, 4, 'The colors are perfect for the season.'),
+(17, 1, 'Carol, everyone loves snacks! Great choice.'),
+(17, 2, 'We should get a variety of healthy and treat options.'),
+(17, 4, 'Maybe include some dietary restrictions?'),
+(18, 1, 'Dave, the photo frame is a nice personal touch!'),
+(18, 2, 'We could put the team photo from last year in it.'),
+(18, 3, 'That''s such a thoughtful gift idea!')
+ON CONFLICT DO NOTHING;
+
+-- 9. Reset sequences to prevent ID conflicts
+SELECT setval('wishlist_id_seq', (SELECT MAX(id) FROM wishlist));
+SELECT setval('wishlist_item_id_seq', (SELECT MAX(id) FROM wishlist_item));
+SELECT setval('wishlist_invite_id_seq', (SELECT MAX(id) FROM wishlist_invite));
+SELECT setval('wishlist_comment_id_seq', (SELECT MAX(id) FROM wishlist_comment));
+
+-- 10. Verify the data
+-- Show summary of collaboration features
+SELECT 
+    'Wishlists' as feature,
+    COUNT(*) as count
+FROM wishlist
+UNION ALL
+SELECT 
+    'Items',
+    COUNT(*)
+FROM wishlist_item
+UNION ALL
+SELECT 
+    'Access Permissions',
+    COUNT(*)
+FROM wishlist_access
+UNION ALL
+SELECT 
+    'Invitations',
+    COUNT(*)
+FROM wishlist_invite
+UNION ALL
+SELECT 
+    'Comments',
+    COUNT(*)
+FROM wishlist_comment;
+
+-- Show role distribution
+SELECT 
+    role,
+    COUNT(*) as user_count
+FROM wishlist_access
+GROUP BY role
+ORDER BY role;
+
+-- Show access type distribution in invitations
+SELECT 
+    access_type,
+    COUNT(*) as invite_count
+FROM wishlist_invite
+GROUP BY access_type
+ORDER BY access_type;
+
+-- Migration and seed complete!
+-- The database now has:
+-- - 4 wishlists with different collaboration levels
+-- - Multiple users with different roles (owner, view_edit, view_only, comment_only)
+-- - Invitations with different access types
+-- - Comments on items demonstrating collaborative discussions
+-- - A shared team wishlist showing full collaboration

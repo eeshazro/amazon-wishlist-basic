@@ -40,17 +40,8 @@ erDiagram
         int id PK
         int wishlist_id FK
         string token UK
-        string access_type
         timestamp expires_at
         int created_by FK
-        timestamp created_at
-    }
-    
-    WISHLIST_COMMENT {
-        int id PK
-        int wishlist_item_id FK
-        int author_id FK
-        string content
         timestamp created_at
     }
     
@@ -81,14 +72,12 @@ erDiagram
     WISHLIST ||--o{ WISHLIST_ITEM : "contains"
     WISHLIST ||--o{ WISHLIST_ACCESS : "has access"
     WISHLIST ||--o{ WISHLIST_INVITE : "has invites"
-    WISHLIST_ITEM ||--o{ WISHLIST_COMMENT : "has comments"
     
     %% External relationships (via API calls)
     USER ||--o{ WISHLIST : "owns"
     USER ||--o{ WISHLIST_ITEM : "added by"
     USER ||--o{ WISHLIST_ACCESS : "has access"
     USER ||--o{ WISHLIST_INVITE : "created by"
-    USER ||--o{ WISHLIST_COMMENT : "authored by"
     PRODUCT ||--o{ WISHLIST_ITEM : "referenced by"
 ```
 
@@ -124,7 +113,7 @@ erDiagram
 - **Key Fields**:
   - `wishlist_id`: Foreign key to wishlist (part of composite PK)
   - `user_id`: External user ID (part of composite PK)
-  - `role`: Access role (owner, view_only, view_edit, comment_only)
+  - `role`: Access role (owner, view_only)
   - `display_name`: Custom display name for the user in this wishlist
 
 #### `wishlist_invite`
@@ -134,20 +123,10 @@ erDiagram
   - `id`: Primary key
   - `wishlist_id`: Foreign key to wishlist
   - `token`: Unique invitation token
-  - `access_type`: Type of access being granted
   - `expires_at`: Token expiration timestamp
   - `created_by`: External user ID who created the invite
   - `created_at`: Creation timestamp
 
-#### `wishlist_comment`
-- **Purpose**: Stores comments on wishlist items
-- **Owner**: Wishlist service
-- **Key Fields**:
-  - `id`: Primary key
-  - `wishlist_item_id`: Foreign key to wishlist_item
-  - `author_id`: External user ID (references user service)
-  - `content`: Comment text
-  - `created_at`: Creation timestamp
 
 ## 🔗 External Service References
 
@@ -156,7 +135,6 @@ erDiagram
 - `wishlist_item.added_by` → `user.id`
 - `wishlist_access.user_id` → `user.id`
 - `wishlist_invite.created_by` → `user.id`
-- `wishlist_comment.author_id` → `user.id`
 
 ### Product Service References
 - `wishlist_item.product_id` → `product.id`
@@ -226,7 +204,6 @@ wishlist_invite: {
   id: 1,
   wishlist_id: 1,
   token: "DMTTLZ4Gl6E9he_gRG9OsxMjVKyKBGmp",
-  access_type: "view_only",
   created_by: 1,    -- Alice
   expires_at: "2024-01-08T00:00:00Z"
 }
@@ -265,17 +242,18 @@ sequenceDiagram
 ## 🚀 Future Extensions
 
 ### Comments System
-The `wishlist_comment` table is ready for implementation:
-- Comments are linked to specific items
+The comments system will be implemented by the new developer:
+- Comments will be linked to specific items
 - Author information via external user service
 - Timestamps for ordering
 
 ### Advanced Permissions
-The `wishlist_access` table supports multiple roles:
+The `wishlist_access` table currently supports basic roles:
 - `owner`: Full control
 - `view_only`: Read-only access
-- `view_edit`: Can add/remove items
-- `comment_only`: Can only comment
+
+Future roles to be added by the new developer:
+- `edit`: Can add/remove items and comment
 
 ### Real-time Features
 Database is designed to support:

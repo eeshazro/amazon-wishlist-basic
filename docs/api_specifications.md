@@ -398,9 +398,7 @@ Content-Type: application/json
 
 **Request:**
 ```json
-{
-  "access_type": "view_only"
-}
+{}
 ```
 
 **Response:**
@@ -431,7 +429,7 @@ Content-Type: application/json
 {
   "message": "Invitation accepted successfully",
   "wishlist_id": 1,
-  "access_type": "view_only"
+  "role": "view_only"
 }
 ```
 
