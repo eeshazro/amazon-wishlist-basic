@@ -105,7 +105,7 @@ export class UserServiceClient {
 Your wishlist service makes HTTP calls instead of direct database access:
 
 ```javascript
-// server-api-calls.js
+// Example: Enriching wishlist items with product data
 app.get('/wishlists/:id/items', async (req, res) => {
   // Get items from your database
   const { rows } = await pool.query('SELECT * FROM wishlist_item WHERE wishlist_id=$1', [req.params.id]);
