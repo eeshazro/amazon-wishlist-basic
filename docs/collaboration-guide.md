@@ -5,9 +5,9 @@ This guide provides detailed instructions for implementing advanced collaboratio
 ## 🎯 Current State
 
 The system currently supports:
-- ✅ **Basic Invitations** - Generate invite links for wishlist access
-- ✅ **View-Only Access** - Users can view shared wishlists
-- ✅ **User Management** - Add/remove collaborators
+- ✅ **Basic Invitations** - Generate invite links for wishlist access, which are view only. When users accept an invite a they must create a unique username for that wishlist. 
+- ✅ **View-Only Access** - Users can view shared wishlists, but no editing or comment
+- ✅ **User Management** - Add/remove invited peoples access through a manage people modal
 - ✅ **Role-Based Access Control** - Infrastructure ready for multiple roles
 
 ## 🚀 Ready-to-Implement Features
@@ -22,7 +22,7 @@ The `wishlist_access` table already supports different roles. Update the invitat
 
 ```sql
 -- The table already supports these roles:
--- 'owner', 'view_only', 'view_edit', 'comment_only'
+-- 'owner', 'view_only', 'view_edit', 
 ```
 
 #### Backend Changes
@@ -92,7 +92,6 @@ const [selectedRole, setSelectedRole] = React.useState('view_only');
   >
     <option value="view_only">View Only</option>
     <option value="view_edit">View & Edit</option>
-    <option value="comment_only">Comment Only</option>
   </select>
 </div>
 
@@ -169,7 +168,7 @@ app.post('/wishlists/:id/items/:itemId/comments', wrap(async (req, res) => {
     WHERE wishlist_id = $1 AND user_id = $2
   `, [wishlistId, uid]);
   
-  if (!access.rows[0] || !['owner', 'view_edit', 'comment_only'].includes(access.rows[0].role)) {
+  if (!access.rows[0] || !['owner', 'view_edit'].includes(access.rows[0].role)) {
     return res.status(403).json({ error: 'insufficient permissions' });
   }
   
@@ -395,337 +394,415 @@ export default function ItemComments({ auth, wishlistId, itemId }) {
 }
 ```
 
-### 3. Real-time Updates with WebSockets
 
-Add real-time collaboration features using WebSockets.
+## 📋 Complete API Endpoint Documentation
 
-#### Backend WebSocket Implementation
+This section provides comprehensive documentation for all collaboration endpoints that need to be implemented.
 
-**File: `apps/wishlist-service/websocket.js`**
+### Comments System Endpoints
 
-Create a WebSocket server:
+#### 1. GET /api/wishlists/:id/items/:itemId/comments
 
-```javascript
-import { WebSocketServer } from 'ws';
-import jwt from 'jsonwebtoken';
+**Request Format:**
+- **HTTP Method:** GET
+- **Endpoint Path:** `/api/wishlists/{id}/items/{itemId}/comments`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+  - `itemId` (integer, required): Wishlist item ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+- **Query Parameters:** None
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+**Response Format:**
+- **Status Codes:**
+  - `200` - Success
+  - `403` - Access denied (user doesn't have access to wishlist)
+  - `404` - Wishlist or item not found
+  - `500` - Server error
 
-export function createWebSocketServer(server) {
-  const wss = new WebSocketServer({ server });
-  
-  // Store active connections by wishlist ID
-  const wishlistConnections = new Map();
-  
-  wss.on('connection', (ws, req) => {
-    // Extract JWT token from query params
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const token = url.searchParams.get('token');
-    
-    if (!token) {
-      ws.close(1008, 'Authentication required');
-      return;
-    }
-    
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      ws.userId = decoded.sub;
-      ws.userName = decoded.name;
-    } catch (error) {
-      ws.close(1008, 'Invalid token');
-      return;
-    }
-    
-    ws.on('message', (data) => {
-      try {
-        const message = JSON.parse(data);
-        handleMessage(ws, message);
-      } catch (error) {
-        console.error('Invalid message format:', error);
-      }
-    });
-    
-    ws.on('close', () => {
-      removeConnection(ws);
-    });
-  });
-  
-  function handleMessage(ws, message) {
-    switch (message.type) {
-      case 'join_wishlist':
-        joinWishlist(ws, message.wishlistId);
-        break;
-      case 'leave_wishlist':
-        leaveWishlist(ws, message.wishlistId);
-        break;
-      default:
-        console.log('Unknown message type:', message.type);
-    }
+**Response JSON Schema:**
+```json
+[
+  {
+    "id": 1,
+    "wishlist_item_id": 5,
+    "author_id": 2,
+    "content": "This looks great!",
+    "created_at": "2025-01-15T10:30:00Z",
+    "author_name": "Bob Smith"
   }
-  
-  function joinWishlist(ws, wishlistId) {
-    if (!wishlistConnections.has(wishlistId)) {
-      wishlistConnections.set(wishlistId, new Set());
-    }
-    
-    wishlistConnections.get(wishlistId).add(ws);
-    ws.currentWishlist = wishlistId;
-    
-    // Notify others that user joined
-    broadcastToWishlist(wishlistId, {
-      type: 'user_joined',
-      userId: ws.userId,
-      userName: ws.userName
-    }, ws);
-  }
-  
-  function leaveWishlist(ws, wishlistId) {
-    const connections = wishlistConnections.get(wishlistId);
-    if (connections) {
-      connections.delete(ws);
-      
-      // Notify others that user left
-      broadcastToWishlist(wishlistId, {
-        type: 'user_left',
-        userId: ws.userId,
-        userName: ws.userName
-      });
-    }
-  }
-  
-  function removeConnection(ws) {
-    if (ws.currentWishlist) {
-      leaveWishlist(ws, ws.currentWishlist);
-    }
-  }
-  
-  function broadcastToWishlist(wishlistId, message, excludeWs = null) {
-    const connections = wishlistConnections.get(wishlistId);
-    if (connections) {
-      connections.forEach(ws => {
-        if (ws !== excludeWs && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(message));
-        }
-      });
-    }
-  }
-  
-  // Export function to broadcast updates
-  return {
-    broadcastWishlistUpdate: (wishlistId, update) => {
-      broadcastToWishlist(wishlistId, {
-        type: 'wishlist_updated',
-        update
-      });
-    },
-    
-    broadcastItemUpdate: (wishlistId, itemUpdate) => {
-      broadcastToWishlist(wishlistId, {
-        type: 'item_updated',
-        itemUpdate
-      });
-    }
-  };
+]
+```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_comment`
+- **Join Tables:** `wishlist_access` (for author name lookup)
+- **Business Logic:** Only return comments for items in wishlists the user has access to
+- **Performance Notes:** Use index on `wishlist_item_id` and `created_at`
+
+**Edge Cases / Validation:**
+- If user has no access to wishlist → 403 Forbidden
+- If wishlist doesn't exist → 404 Not Found
+- If item doesn't exist in wishlist → 404 Not Found
+- If no comments exist → Return empty array `[]`
+- If author name lookup fails → Use `author_id` as fallback
+
+---
+
+#### 2. POST /api/wishlists/:id/items/:itemId/comments
+
+**Request Format:**
+- **HTTP Method:** POST
+- **Endpoint Path:** `/api/wishlists/{id}/items/{itemId}/comments`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+  - `itemId` (integer, required): Wishlist item ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+  - `Content-Type: application/json` (required)
+- **Body Payload:**
+```json
+{
+  "content": "This is a great item!"
 }
 ```
 
-#### Frontend WebSocket Client
+**Response Format:**
+- **Status Codes:**
+  - `201` - Comment created successfully
+  - `400` - Bad request (missing or invalid content)
+  - `403` - Insufficient permissions (user can't comment)
+  - `404` - Wishlist or item not found
+  - `500` - Server error
 
-**File: `apps/web-frontend/src/hooks/useWebSocket.js`**
-
-Create a WebSocket hook:
-
-```javascript
-import { useEffect, useRef, useState } from 'react';
-
-export function useWebSocket(url, token) {
-  const [socket, setSocket] = useState(null);
-  const [connected, setConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState(null);
-  const reconnectTimeoutRef = useRef(null);
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
-
-  useEffect(() => {
-    if (!token) return;
-
-    const connect = () => {
-      const ws = new WebSocket(`${url}?token=${token}`);
-      
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        setConnected(true);
-        setSocket(ws);
-        reconnectAttempts.current = 0;
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          setLastMessage(message);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        setConnected(false);
-        setSocket(null);
-        
-        // Attempt to reconnect
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          reconnectAttempts.current++;
-          const delay = Math.pow(2, reconnectAttempts.current) * 1000;
-          reconnectTimeoutRef.current = setTimeout(connect, delay);
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-    };
-
-    connect();
-
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (socket) {
-        socket.close();
-      }
-    };
-  }, [url, token]);
-
-  const sendMessage = (message) => {
-    if (socket && connected) {
-      socket.send(JSON.stringify(message));
-    }
-  };
-
-  const joinWishlist = (wishlistId) => {
-    sendMessage({ type: 'join_wishlist', wishlistId });
-  };
-
-  const leaveWishlist = (wishlistId) => {
-    sendMessage({ type: 'leave_wishlist', wishlistId });
-  };
-
-  return {
-    connected,
-    lastMessage,
-    sendMessage,
-    joinWishlist,
-    leaveWishlist
-  };
+**Response JSON Schema:**
+```json
+{
+  "id": 15,
+  "wishlist_item_id": 5,
+  "author_id": 2,
+  "content": "This is a great item!",
+  "created_at": "2025-01-15T10:30:00Z"
 }
 ```
 
-### 4. Notification System
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_comment` (INSERT)
+- **Validation Table:** `wishlist_access` (check permissions)
+- **Business Logic:** Only users with `owner` or `view_edit` roles can comment
+- **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)`
 
-Add email/SMS notifications for wishlist changes.
+**Edge Cases / Validation:**
+- If content is empty or missing → 400 Bad Request
+- If content exceeds 1000 characters → 400 Bad Request
+- If user has `view_only` role → 403 Forbidden
+- If user has no access to wishlist → 403 Forbidden
+- If wishlist doesn't exist → 404 Not Found
+- If item doesn't exist in wishlist → 404 Not Found
 
-#### Backend Notification Service
+---
 
-**File: `apps/wishlist-service/notifications.js`**
+#### 3. DELETE /api/wishlists/:id/items/:itemId/comments/:commentId
 
-```javascript
-import nodemailer from 'nodemailer';
+**Request Format:**
+- **HTTP Method:** DELETE
+- **Endpoint Path:** `/api/wishlists/{id}/items/{itemId}/comments/{commentId}`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+  - `itemId` (integer, required): Wishlist item ID
+  - `commentId` (integer, required): Comment ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
 
-const transporter = nodemailer.createTransporter({
-  host: process.env.SMTP_HOST || 'localhost',
-  port: process.env.SMTP_PORT || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
+**Response Format:**
+- **Status Codes:**
+  - `204` - Comment deleted successfully
+  - `403` - Insufficient permissions (not author or admin)
+  - `404` - Comment not found
+  - `500` - Server error
 
-export async function sendWishlistNotification(type, wishlistId, userId, data) {
-  try {
-    // Get wishlist collaborators
-    const collaborators = await pool.query(`
-      SELECT wa.user_id, u.email, u.public_name
-      FROM wishlist_access wa
-      LEFT JOIN wishlist w ON wa.wishlist_id = w.id
-      WHERE wa.wishlist_id = $1 AND wa.user_id != $2
-    `, [wishlistId, userId]);
-    
-    const emails = collaborators.rows.map(row => row.email).filter(Boolean);
-    
-    if (emails.length === 0) return;
-    
-    const subject = getNotificationSubject(type, data);
-    const html = getNotificationHTML(type, data);
-    
-    await transporter.sendMail({
-      from: process.env.FROM_EMAIL || 'noreply@wishlist.com',
-      to: emails,
-      subject,
-      html
-    });
-    
-    console.log(`Notification sent to ${emails.length} users for ${type}`);
-  } catch (error) {
-    console.error('Failed to send notification:', error);
-  }
-}
-
-function getNotificationSubject(type, data) {
-  switch (type) {
-    case 'item_added':
-      return `New item added to ${data.wishlistName}`;
-    case 'item_removed':
-      return `Item removed from ${data.wishlistName}`;
-    case 'comment_added':
-      return `New comment on ${data.itemTitle}`;
-    default:
-      return 'Wishlist Update';
-  }
-}
-
-function getNotificationHTML(type, data) {
-  const baseHTML = `
-    <html>
-      <body>
-        <h2>Wishlist Update</h2>
-        <p>Hello!</p>
-  `;
-  
-  let content = '';
-  switch (type) {
-    case 'item_added':
-      content = `
-        <p><strong>${data.userName}</strong> added a new item to <strong>${data.wishlistName}</strong>:</p>
-        <p><strong>${data.itemTitle}</strong></p>
-        <p><a href="${data.wishlistUrl}">View Wishlist</a></p>
-      `;
-      break;
-    case 'item_removed':
-      content = `
-        <p><strong>${data.userName}</strong> removed an item from <strong>${data.wishlistName}</strong>:</p>
-        <p><strong>${data.itemTitle}</strong></p>
-        <p><a href="${data.wishlistUrl}">View Wishlist</a></p>
-      `;
-      break;
-    case 'comment_added':
-      content = `
-        <p><strong>${data.userName}</strong> commented on <strong>${data.itemTitle}</strong>:</p>
-        <p>"${data.comment}"</p>
-        <p><a href="${data.wishlistUrl}">View Wishlist</a></p>
-      `;
-      break;
-  }
-  
-  return baseHTML + content + `
-        <p>Best regards,<br>The Wishlist Team</p>
-      </body>
-    </html>
-  `;
+**Response JSON Schema:**
+- **Success:** No content (204 status)
+- **Error:**
+```json
+{
+  "error": "comment not found"
 }
 ```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_comment` (DELETE)
+- **Validation Tables:** `wishlist_access` (check user role)
+- **Business Logic:** Only comment author OR users with `owner`/`view_edit` roles can delete
+- **Performance Notes:** Use index on `wishlist_comment(id)` and `wishlist_access(wishlist_id, user_id)`
+
+**Edge Cases / Validation:**
+- If comment doesn't exist → 404 Not Found
+- If user is not the author AND doesn't have edit permissions → 403 Forbidden
+- If user has no access to wishlist → 403 Forbidden
+- If comment belongs to different wishlist → 404 Not Found
+
+---
+
+### Enhanced Invitation System Endpoints
+
+#### 4. POST /api/wishlists/:id/invites (Enhanced)
+
+**Request Format:**
+- **HTTP Method:** POST
+- **Endpoint Path:** `/api/wishlists/{id}/invites`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+  - `Content-Type: application/json` (required)
+- **Body Payload:**
+```json
+{
+  "access_type": "view_edit"
+}
+```
+
+**Response Format:**
+- **Status Codes:**
+  - `201` - Invitation created successfully
+  - `400` - Bad request (invalid access_type)
+  - `403` - Only owner can create invites
+  - `404` - Wishlist not found
+  - `500` - Server error
+
+**Response JSON Schema:**
+```json
+{
+  "id": 8,
+  "wishlist_id": 1,
+  "token": "abc123def456ghi789",
+  "expires_at": "2025-01-22T10:30:00Z",
+  "created_by": 1,
+  "created_at": "2025-01-15T10:30:00Z",
+  "access_type": "view_edit",
+  "inviteLink": "http://localhost:5173/wishlist/friends/invite/abc123def456ghi789"
+}
+```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_invite` (INSERT)
+- **Validation Table:** `wishlist` (check ownership)
+- **Business Logic:** Only wishlist owner can create invites
+- **Performance Notes:** Use index on `wishlist(owner_id)`
+
+**Edge Cases / Validation:**
+- If access_type is invalid → 400 Bad Request (must be: `view_only`, `view_edit`)
+- If user is not the wishlist owner → 403 Forbidden
+- If wishlist doesn't exist → 404 Not Found
+- If token generation fails → 500 Server Error
+
+---
+
+#### 5. POST /api/invites/:token/accept (Enhanced)
+
+**Request Format:**
+- **HTTP Method:** POST
+- **Endpoint Path:** `/api/invites/{token}/accept`
+- **Path Parameters:**
+  - `token` (string, required): Invitation token
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+  - `Content-Type: application/json` (required)
+- **Body Payload:**
+```json
+{
+  "display_name": "John Doe"
+}
+```
+
+**Response Format:**
+- **Status Codes:**
+  - `201` - Invitation accepted successfully
+  - `400` - Bad request (user already has access, missing display_name)
+  - `404` - Invitation not found or expired
+  - `500` - Server error
+
+**Response JSON Schema:**
+```json
+{
+  "wishlist_id": 1,
+  "user_id": 3,
+  "role": "view_edit",
+  "display_name": "John Doe",
+  "invited_by": 1,
+  "invited_at": "2025-01-15T10:30:00Z"
+}
+```
+
+**Data Source Guidance:**
+- **Primary Tables:** `wishlist_access` (INSERT), `wishlist_invite` (DELETE after acceptance)
+- **Validation Table:** `wishlist_invite` (check token validity and expiration)
+- **Business Logic:** Map `access_type` from invite to appropriate `role` in access table
+- **Performance Notes:** Use index on `wishlist_invite(token)`
+
+**Edge Cases / Validation:**
+- If token is invalid or expired → 404 Not Found
+- If user already has access to wishlist → 400 Bad Request
+- If display_name is missing → 400 Bad Request
+- If display_name exceeds 255 characters → 400 Bad Request
+- If access record creation fails → 500 Server Error
+
+---
+
+### Role Management Endpoints
+
+#### 6. PUT /api/wishlists/:id/access/:userId (Enhanced)
+
+**Request Format:**
+- **HTTP Method:** PUT
+- **Endpoint Path:** `/api/wishlists/{id}/access/{userId}`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+  - `userId` (integer, required): Target user ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+  - `Content-Type: application/json` (required)
+- **Body Payload:**
+```json
+{
+  "role": "view_edit",
+  "display_name": "Updated Name"
+}
+```
+
+**Response Format:**
+- **Status Codes:**
+  - `200` - Role updated successfully
+  - `400` - Bad request (invalid role)
+  - `403` - Only owner can update roles
+  - `404` - Access record not found
+  - `500` - Server error
+
+**Response JSON Schema:**
+```json
+{
+  "wishlist_id": 1,
+  "user_id": 3,
+  "role": "view_edit",
+  "display_name": "Updated Name",
+  "invited_by": 1,
+  "invited_at": "2025-01-15T10:30:00Z"
+}
+```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_access` (UPDATE)
+- **Validation Table:** `wishlist` (check ownership)
+- **Business Logic:** Only wishlist owner can update roles
+- **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)`
+
+**Edge Cases / Validation:**
+- If role is invalid → 400 Bad Request (must be: `owner`, `view_edit`, `view_only`)
+- If user is not the wishlist owner → 403 Forbidden
+- If access record doesn't exist → 404 Not Found
+- If display_name exceeds 255 characters → 400 Bad Request
+- If trying to change owner role → 400 Bad Request (owners can't be demoted)
+
+---
+
+### Enhanced Item Management Endpoints
+
+#### 7. POST /api/wishlists/:id/items (Enhanced with Permissions)
+
+**Request Format:**
+- **HTTP Method:** POST
+- **Endpoint Path:** `/api/wishlists/{id}/items`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+  - `Content-Type: application/json` (required)
+- **Body Payload:**
+```json
+{
+  "product_id": 123,
+  "title": "Wireless Headphones",
+  "priority": 1
+}
+```
+
+**Response Format:**
+- **Status Codes:**
+  - `201` - Item added successfully
+  - `400` - Bad request (missing required fields, duplicate item)
+  - `403` - Insufficient permissions (user can't edit)
+  - `404` - Wishlist not found
+  - `500` - Server error
+
+**Response JSON Schema:**
+```json
+{
+  "id": 25,
+  "product_id": 123,
+  "wishlist_id": 1,
+  "title": "Wireless Headphones",
+  "priority": 1,
+  "added_by": 2,
+  "created_at": "2025-01-15T10:30:00Z"
+}
+```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_item` (INSERT)
+- **Validation Table:** `wishlist_access` (check edit permissions)
+- **Business Logic:** Only users with `owner` or `view_edit` roles can add items
+- **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)` and `wishlist_item(wishlist_id, product_id)`
+
+**Edge Cases / Validation:**
+- If user has `view_only` role → 403 Forbidden
+- If product_id is missing → 400 Bad Request
+- If title is missing or empty → 400 Bad Request
+- If item already exists in wishlist → 400 Bad Request (duplicate)
+- If priority is not a number → 400 Bad Request
+
+---
+
+#### 8. DELETE /api/wishlists/:id/items/:itemId (Enhanced with Permissions)
+
+**Request Format:**
+- **HTTP Method:** DELETE
+- **Endpoint Path:** `/api/wishlists/{id}/items/{itemId}`
+- **Path Parameters:**
+  - `id` (integer, required): Wishlist ID
+  - `itemId` (integer, required): Item ID
+- **Headers:**
+  - `Authorization: Bearer <token>` (required)
+
+**Response Format:**
+- **Status Codes:**
+  - `204` - Item deleted successfully
+  - `403` - Insufficient permissions (user can't edit)
+  - `404` - Item not found
+  - `500` - Server error
+
+**Response JSON Schema:**
+- **Success:** No content (204 status)
+- **Error:**
+```json
+{
+  "error": "item not found"
+}
+```
+
+**Data Source Guidance:**
+- **Primary Table:** `wishlist_item` (DELETE)
+- **Validation Table:** `wishlist_access` (check edit permissions)
+- **Business Logic:** Only users with `owner` or `view_edit` roles can delete items
+- **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)` and `wishlist_item(id, wishlist_id)`
+
+**Edge Cases / Validation:**
+- If user has `view_only` role → 403 Forbidden
+- If item doesn't exist in wishlist → 404 Not Found
+- If user has no access to wishlist → 403 Forbidden
+- If item belongs to different wishlist → 404 Not Found
+
+---
 
 ## 🧪 Testing Your Implementation
 
@@ -765,9 +842,6 @@ curl http://localhost:8080/api/wishlists/1/items/1/comments \
   -H "Authorization: Bearer <token>"
 ```
 
-### 3. Test Real-time Updates
-
-Open multiple browser windows and make changes to see real-time updates.
 
 ## 🎯 Next Steps
 

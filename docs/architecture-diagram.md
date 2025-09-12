@@ -238,7 +238,6 @@ graph TD
     subgraph "Collaboration"
         J[👥 View shared wishlist] --> K[📝 Add items (if permitted)]
         K --> L[💬 Comment on items (if permitted)]
-        L --> M[🔄 Real-time updates]
     end
     
     D --> E

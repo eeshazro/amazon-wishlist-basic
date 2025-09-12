@@ -313,9 +313,6 @@ See [collaboration-guide.md](collaboration-guide.md) for detailed instructions.
 
 The infrastructure is ready. Follow the collaboration guide to implement.
 
-### 3. Real-time Updates
-
-Add WebSocket support following the patterns in the collaboration guide.
 
 ## 📦 Deployment
 

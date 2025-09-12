@@ -192,7 +192,7 @@ user-service
 
 ### Frontend Changes
 - Add `CommentThread` component (drawer/modal) per full version
-- Update `AmazonItemCard` to show comment trigger and count
+- Update `AmazonItemCard` to show comment trigger
 - Add `InviteModal` and `ManagePeopleModal` for invites and role updates
 - Respect role-based UI gating; still rely on server enforcement
 

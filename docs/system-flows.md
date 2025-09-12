@@ -452,7 +452,6 @@ graph TD
 ### 3. Collaboration Flow
 - Invitation tokens with expiration
 - Role-based access control
-- Real-time permission validation
 
 ### 4. Error Handling Flow
 - Graceful degradation for external services

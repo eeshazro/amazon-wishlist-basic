@@ -29,66 +29,29 @@ CREATE INDEX IF NOT EXISTS idx_wishlist_comment_item ON wishlist_comment(wishlis
 CREATE INDEX IF NOT EXISTS idx_wishlist_comment_user ON wishlist_comment(user_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_comment_created ON wishlist_comment(created_at);
 
--- 5. Add comment count to wishlist_item for performance (optional optimization)
-ALTER TABLE wishlist_item 
-ADD COLUMN comment_count INTEGER DEFAULT 0;
+-- 5. Comments will be displayed in order of creation without count tracking
 
--- 6. Create function to update comment count (for future use)
-CREATE OR REPLACE FUNCTION update_comment_count()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE wishlist_item 
-        SET comment_count = comment_count + 1 
-        WHERE id = NEW.wishlist_item_id;
-        RETURN NEW;
-    ELSIF TG_OP = 'DELETE' THEN
-        UPDATE wishlist_item 
-        SET comment_count = comment_count - 1 
-        WHERE id = OLD.wishlist_item_id;
-        RETURN OLD;
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
--- 7. Create trigger to automatically update comment count
-CREATE TRIGGER trigger_update_comment_count
-    AFTER INSERT OR DELETE ON wishlist_comment
-    FOR EACH ROW EXECUTE FUNCTION update_comment_count();
-
--- 8. Update existing comment counts (initialize for existing items)
-UPDATE wishlist_item 
-SET comment_count = (
-    SELECT COUNT(*) 
-    FROM wishlist_comment 
-    WHERE wishlist_comment.wishlist_item_id = wishlist_item.id
-);
-
--- 9. Add helpful comments to tables
+-- 6. Add helpful comments to tables
 COMMENT ON TABLE wishlist_comment IS 'Comments on wishlist items for collaborative discussions';
 COMMENT ON COLUMN wishlist_invite.access_type IS 'Type of access being granted: view_only or edit';
 COMMENT ON COLUMN wishlist_access.role IS 'User role: owner (full control), edit (can edit items and comment), view_only (read-only)';
-COMMENT ON COLUMN wishlist_item.comment_count IS 'Cached count of comments for performance optimization';
 
--- 10. Create view for wishlist items with comment counts (useful for API responses)
+-- 7. Create view for wishlist items (useful for API responses)
 CREATE OR REPLACE VIEW wishlist_item_with_comments AS
 SELECT 
     wi.*,
-    COALESCE(wi.comment_count, 0) as comment_count,
     w.name as wishlist_name,
     w.owner_id as wishlist_owner_id
 FROM wishlist_item wi
 JOIN wishlist w ON wi.wishlist_id = w.id;
 
--- 11. Grant permissions (if using specific database users)
+-- 8. Grant permissions (if using specific database users)
 -- GRANT SELECT, INSERT, UPDATE, DELETE ON wishlist_comment TO wishlist_user;
 -- GRANT USAGE, SELECT ON SEQUENCE wishlist_comment_id_seq TO wishlist_user;
 -- GRANT SELECT ON wishlist_item_with_comments TO wishlist_user;
 
 -- Migration complete!
 -- The database now supports:
--- - Comments on wishlist items
+-- - Comments on wishlist items (displayed in creation order)
 -- - Advanced roles (owner, edit, view_only)
 -- - Access types in invitations (view_only, edit)
--- - Performance optimizations for comment counts

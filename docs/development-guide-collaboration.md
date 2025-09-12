@@ -142,15 +142,15 @@ async function canManageWishlistRoles(userId, wishlistId) {
 
 ```javascript
 // In apps/api-gateway/server.js
-// Update wishlist item responses to include comment counts
+// Update wishlist item responses to include comments
 async function enrichWishlistItemsWithComments(items) {
-  // Add comment_count to each item
-  // Fetch from wishlist_item.comment_count or count comments
+  // Add comments array to each item
+  // Fetch comments ordered by created_at
 }
 
 // Update wishlist responses to include comment data
 async function enrichWishlistWithComments(wishlist) {
-  // Add comment counts for items
+  // Add comments for items
   // Add recent comments if needed
 }
 ```
@@ -286,10 +286,9 @@ export default function InviteAccept({ token }) {
 // Add comment functionality to existing item cards
 export default function AmazonItemCard({ item, auth, wid, canDelete, onDelete }) {
   // Implementation needed:
-  // 1. Show comment count badge
-  // 2. Add "View Comments" button
-  // 3. Open CommentThread when clicked
-  // 4. Show comment form if user can comment
+  // 1. Add "View Comments" button
+  // 2. Open CommentThread when clicked
+  // 3. Show comment form if user can comment
 }
 ```
 

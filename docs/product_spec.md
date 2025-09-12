@@ -20,7 +20,6 @@ References:
 - **Streamlined Architecture**: Unified wishlist service with single database
 - **Role-Based Access Control**: Granular permissions for different user types
 - **Enhanced Invitations**: Flexible invitation system with access types
-- **Comments Infrastructure**: Ready for future comment functionality
 - **Performance**: No cross-service calls for permission checks
 - **Maintainability**: Single codebase for wishlist domain
 
@@ -28,12 +27,10 @@ References:
 - Rich text comments, attachments, reactions, or mentions
 - Cross-wishlist commenting or global activity feeds
 - External identity providers beyond existing demo auth
-- Real-time notifications (infrastructure ready for future)
 
 ### Users & Roles
 - Owner: Creates wishlists, manages roles, full control
 - Editor (view_edit): Views and edits wishlist/items, can comment
-- Commenter (comment_only): Views items, can comment
 - Viewer (view_only): Views items and existing comments only
 - Invitee: Non-member who accepts an invitation token
 
@@ -66,7 +63,7 @@ References:
 - Expired or invalid tokens produce appropriate errors
 
 4) Web UI enhancements
-- `AmazonItemCard` shows comment count and opens a `CommentThread` drawer/modal
+- `AmazonItemCard` opens a `CommentThread` drawer/modal for comments
 - `CommentThread` supports viewing thread and adding a new comment when permitted
 - `ManagePeopleModal` lists collaborators, current roles, and allows owner updates/removal
 - `InviteModal` generates invite links and shows expiry and access type
@@ -78,17 +75,11 @@ Journey A: Owner invites collaborator with edit
 2. Invitee opens link → sees wishlist details summary → accepts, sets display name
 3. Invitee can add items and comment; owner sees them listed in Manage People
 
-Journey B: Comment-only collaborator feedback
-1. Owner invites with `comment_only`
-2. Invitee accepts → can comment on items but cannot edit or add items
-3. Owner or editor responds in thread; discussion remains attached to item
-
-Journey C: Role change
+Journey B: Role change
 1. Owner opens Manage People → updates a collaborator from `view_edit` to `view_only`
 2. Collaborator immediately loses edit/comment controls in UI; server also enforces
 
-Journey D: Expired/invalid invite
-1. Invitee opens expired token → sees error screen explaining expiry and next steps
+
 
 ### UX Notes
 - Keep comments as simple single-line/paragraph text
@@ -101,11 +92,6 @@ Journey D: Expired/invalid invite
 - Collaboration service for invites/access/comments
 - API gateway for auth and enrichment
 
-### Analytics & Success Metrics
-- Adoption: % wishlists with ≥1 collaborator; % items with ≥1 comment
-- Engagement: average comments per active wishlist per week
-- Reliability: <1% 5xx on comments and access endpoints
-- Performance: p95 list-comments latency < 300ms; p95 add-comment < 400ms
 
 ### Rollout Plan
 1. Ship DB migrations (add comments table; add invite `access_type`)
@@ -121,13 +107,10 @@ Journey D: Expired/invalid invite
 
 ### Out of Scope (Future)
 - Mentions, threads with replies, reactions
-- Notifications and real-time updates (WebSocket)
 - Moderation/reporting flows
 
 ### Acceptance Test Scenarios (sample)
 - View-only user cannot add items or comments (UI disabled, API returns FORBIDDEN)
-- Comment-only user can add comments but cannot edit items
 - Editor can add/edit items and comment; cannot manage users
 - Owner can change roles; changes reflect immediately in UI and API
-- Expired invite returns INVITE_EXPIRED; invalid returns INVITE_INVALID
 

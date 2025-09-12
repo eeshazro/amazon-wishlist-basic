@@ -255,10 +255,8 @@ The `wishlist_access` table currently supports basic roles:
 Future roles to be added by the new developer:
 - `edit`: Can add/remove items and comment
 
-### Real-time Features
+### Audit Features
 Database is designed to support:
-- WebSocket connections for live updates
-- Notification triggers for changes
 - Audit trails for collaboration
 
 This database design provides a solid foundation for the wishlist service while maintaining clear boundaries with external services.
