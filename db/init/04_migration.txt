@@ -8,12 +8,13 @@ ADD COLUMN access_type VARCHAR(20) NOT NULL DEFAULT 'view_only'
     CHECK (access_type IN ('view_only', 'edit'));
 
 -- 2. Update wishlist_access table to support advanced roles
+-- Note: Owners are not stored in access table as they have inherent access via wishlist.owner_id
 ALTER TABLE wishlist_access 
 DROP CONSTRAINT IF EXISTS wishlist_access_role_check;
 
 ALTER TABLE wishlist_access 
 ADD CONSTRAINT wishlist_access_role_check 
-    CHECK (role IN ('owner', 'edit', 'view_only'));
+    CHECK (role IN ('edit', 'view_only'));
 
 -- 3. Create wishlist_comment table for item discussions
 CREATE TABLE IF NOT EXISTS wishlist_comment (
@@ -34,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_wishlist_comment_created ON wishlist_comment(crea
 -- 6. Add helpful comments to tables
 COMMENT ON TABLE wishlist_comment IS 'Comments on wishlist items for collaborative discussions';
 COMMENT ON COLUMN wishlist_invite.access_type IS 'Type of access being granted: view_only or edit';
-COMMENT ON COLUMN wishlist_access.role IS 'User role: owner (full control), edit (can edit items and comment), view_only (read-only)';
+COMMENT ON COLUMN wishlist_access.role IS 'User role: edit (can edit items and comment), view_only (read-only). Owners have inherent access via wishlist.owner_id';
 
 -- 7. Create view for wishlist items (useful for API responses)
 CREATE OR REPLACE VIEW wishlist_item_with_comments AS
@@ -53,5 +54,5 @@ JOIN wishlist w ON wi.wishlist_id = w.id;
 -- Migration complete!
 -- The database now supports:
 -- - Comments on wishlist items (displayed in creation order)
--- - Advanced roles (owner, edit, view_only)
+-- - Advanced roles (edit, view_only) - owners have inherent access via wishlist.owner_id
 -- - Access types in invitations (view_only, edit)

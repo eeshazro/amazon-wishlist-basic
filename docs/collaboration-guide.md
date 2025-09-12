@@ -22,7 +22,7 @@ The `wishlist_access` table already supports different roles. Update the invitat
 
 ```sql
 -- The table already supports these roles:
--- 'owner', 'view_only', 'view_edit', 
+-- 'view_only', 'view_edit' (owners have inherent access via wishlist.owner_id), 
 ```
 
 #### Backend Changes
@@ -34,7 +34,7 @@ Add permission checks for edit operations:
 ```javascript
 // Add this helper function
 const hasEditPermission = (userRole) => {
-  return ['owner', 'view_edit'].includes(userRole);
+  return ['view_edit'].includes(userRole);
 };
 
 // Update the add item endpoint
@@ -168,7 +168,7 @@ app.post('/wishlists/:id/items/:itemId/comments', wrap(async (req, res) => {
     WHERE wishlist_id = $1 AND user_id = $2
   `, [wishlistId, uid]);
   
-  if (!access.rows[0] || !['owner', 'view_edit'].includes(access.rows[0].role)) {
+  if (!access.rows[0] || !['view_edit'].includes(access.rows[0].role)) {
     return res.status(403).json({ error: 'insufficient permissions' });
   }
   
@@ -200,7 +200,7 @@ app.delete('/wishlists/:id/items/:itemId/comments/:commentId', wrap(async (req, 
   }
   
   const isAuthor = comment.rows[0].author_id === uid;
-  const hasEditPermission = ['owner', 'view_edit'].includes(comment.rows[0].role);
+  const hasEditPermission = ['view_edit'].includes(comment.rows[0].role);
   
   if (!isAuthor && !hasEditPermission) {
     return res.status(403).json({ error: 'insufficient permissions' });
@@ -489,7 +489,7 @@ This section provides comprehensive documentation for all collaboration endpoint
 **Data Source Guidance:**
 - **Primary Table:** `wishlist_comment` (INSERT)
 - **Validation Table:** `wishlist_access` (check permissions)
-- **Business Logic:** Only users with `owner` or `view_edit` roles can comment
+- **Business Logic:** Only users with `view_edit` roles can comment (owners have inherent access)
 - **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)`
 
 **Edge Cases / Validation:**
@@ -533,7 +533,7 @@ This section provides comprehensive documentation for all collaboration endpoint
 **Data Source Guidance:**
 - **Primary Table:** `wishlist_comment` (DELETE)
 - **Validation Tables:** `wishlist_access` (check user role)
-- **Business Logic:** Only comment author OR users with `owner`/`view_edit` roles can delete
+- **Business Logic:** Only comment author OR users with `view_edit` roles can delete (owners have inherent access)
 - **Performance Notes:** Use index on `wishlist_comment(id)` and `wishlist_access(wishlist_id, user_id)`
 
 **Edge Cases / Validation:**
@@ -698,11 +698,11 @@ This section provides comprehensive documentation for all collaboration endpoint
 - **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)`
 
 **Edge Cases / Validation:**
-- If role is invalid → 400 Bad Request (must be: `owner`, `view_edit`, `view_only`)
+- If role is invalid → 400 Bad Request (must be: `view_edit`, `view_only`)
 - If user is not the wishlist owner → 403 Forbidden
 - If access record doesn't exist → 404 Not Found
 - If display_name exceeds 255 characters → 400 Bad Request
-- If trying to change owner role → 400 Bad Request (owners can't be demoted)
+- If trying to change owner role → 400 Bad Request (owners are not stored in access table)
 
 ---
 
@@ -751,7 +751,7 @@ This section provides comprehensive documentation for all collaboration endpoint
 **Data Source Guidance:**
 - **Primary Table:** `wishlist_item` (INSERT)
 - **Validation Table:** `wishlist_access` (check edit permissions)
-- **Business Logic:** Only users with `owner` or `view_edit` roles can add items
+- **Business Logic:** Only users with `view_edit` roles can add items (owners have inherent access)
 - **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)` and `wishlist_item(wishlist_id, product_id)`
 
 **Edge Cases / Validation:**
@@ -793,7 +793,7 @@ This section provides comprehensive documentation for all collaboration endpoint
 **Data Source Guidance:**
 - **Primary Table:** `wishlist_item` (DELETE)
 - **Validation Table:** `wishlist_access` (check edit permissions)
-- **Business Logic:** Only users with `owner` or `view_edit` roles can delete items
+- **Business Logic:** Only users with `view_edit` roles can delete items (owners have inherent access)
 - **Performance Notes:** Use index on `wishlist_access(wishlist_id, user_id)` and `wishlist_item(id, wishlist_id)`
 
 **Edge Cases / Validation:**

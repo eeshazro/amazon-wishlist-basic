@@ -6,7 +6,6 @@ import express from 'express';
 import cors from 'cors';
 import pkg from 'pg';
 import { nanoid } from 'nanoid';
-import { userServiceClient, productServiceClient } from './src/serviceClients.js';
 
 const { Pool } = pkg;
 
@@ -55,12 +54,23 @@ function authToken(req) {
 // Enhanced permission checking function with role-based access control
 async function canEditWishlist(userId, wishlistId) {
   try {
+    console.log(`Checking edit permissions for user ${userId} on wishlist ${wishlistId}`);
+    
     // Check if user is owner
     const wishlist = await pool.query('SELECT owner_id FROM wishlist WHERE id=$1', [wishlistId]);
-    if (!wishlist.rows[0]) return false;
+    if (!wishlist.rows[0]) {
+      console.log(`Wishlist ${wishlistId} not found`);
+      return false;
+    }
+    
+    const ownerId = wishlist.rows[0].owner_id;
+    console.log(`Wishlist ${wishlistId} owner: ${ownerId}, requesting user: ${userId}`);
     
     // Owner can always edit
-    if (wishlist.rows[0].owner_id === userId) return true;
+    if (ownerId === userId) {
+      console.log(`User ${userId} is owner of wishlist ${wishlistId} - allowing edit`);
+      return true;
+    }
     
     // Check if user has edit permissions in access table
     const access = await pool.query(`
@@ -69,11 +79,15 @@ async function canEditWishlist(userId, wishlistId) {
       [wishlistId, userId]
     );
     
-    if (!access.rows[0]) return false;
+    if (!access.rows[0]) {
+      console.log(`User ${userId} has no access to wishlist ${wishlistId}`);
+      return false;
+    }
     
-    // Check if role allows editing
+    // Check if role allows editing (currently only view_only is supported)
     const role = access.rows[0].role;
-    return role === 'owner' || role === 'edit';
+    console.log(`User ${userId} has role '${role}' on wishlist ${wishlistId}`);
+    return role === 'edit';
     
   } catch (e) {
     console.error('canEditWishlist check failed:', e);
@@ -158,26 +172,8 @@ app.get('/wishlists/:id', wrap(async (req, res) => {
     [wishlistId]
   );
   
-  // Enrich items with product data
-  const enrichedItems = await Promise.all(
-    itemRows.map(async (item) => {
-      try {
-        console.log(`Fetching product ${item.product_id} for item ${item.id}`);
-        const product = await productServiceClient.getProductById(item.product_id);
-        console.log(`Product ${item.product_id} result:`, product ? 'found' : 'not found');
-        return {
-          ...item,
-          product: product || { id: item.product_id, title: item.title }
-        };
-      } catch (error) {
-        console.error(`Failed to enrich item ${item.id} with product data:`, error);
-        return {
-          ...item,
-          product: { id: item.product_id, title: item.title }
-        };
-      }
-    })
-  );
+  // Return items without enrichment (enrichment handled by API Gateway)
+  const enrichedItems = itemRows;
   
   // Return enriched wishlist with items and role
   res.json({
@@ -194,24 +190,8 @@ app.get('/wishlists/:id/items', wrap(async (req, res) => {
     [req.params.id]
   );
   
-  // Enrich items with product data from product service
-  const enrichedItems = await Promise.all(
-    rows.map(async (item) => {
-      try {
-        const product = await productServiceClient.getProductById(item.product_id);
-        return {
-          ...item,
-          product: product || { id: item.product_id, title: item.title }
-        };
-      } catch (error) {
-        console.error(`Failed to enrich item ${item.id} with product data:`, error);
-        return {
-          ...item,
-          product: { id: item.product_id, title: item.title }
-        };
-      }
-    })
-  );
+  // Return items without enrichment (enrichment handled by API Gateway)
+  const enrichedItems = rows;
   
   res.json(enrichedItems);
 }));
@@ -233,8 +213,13 @@ app.post('/wishlists/:id/items', wrap(async (req, res) => {
   const wishlistId = req.params.id;
   const { product_id, title, priority = 0 } = req.body;
   
+  console.log(`Adding item to wishlist ${wishlistId} by user ${uid}:`, { product_id, title, priority });
+  
   // Check if user can edit this wishlist
-  if (!(await canEditWishlist(uid, wishlistId))) {
+  const canEdit = await canEditWishlist(uid, wishlistId);
+  console.log(`User ${uid} can edit wishlist ${wishlistId}:`, canEdit);
+  
+  if (!canEdit) {
     return res.status(403).json({ error: 'insufficient permissions' });
   }
   
@@ -243,8 +228,10 @@ app.post('/wishlists/:id/items', wrap(async (req, res) => {
       INSERT INTO wishlist_item
       (product_id, wishlist_id, title, priority, added_by) VALUES ($1,$2,$3,$4,$5) RETURNING *
     `, [product_id, wishlistId, title, priority, uid]);
+    console.log(`Successfully added item:`, rows[0]);
     res.status(201).json(rows[0]);
   } catch (e) {
+    console.error('Error adding item:', e);
     res.status(400).json({ error: e.message });
   }
 }));
@@ -253,17 +240,29 @@ app.post('/wishlists/:id/items', wrap(async (req, res) => {
 app.delete('/wishlists/:id/items/:itemId', wrap(async (req, res) => {
   const uid = userId(req);
   const wishlistId = req.params.id;
+  const itemId = req.params.itemId;
+  
+  console.log(`Deleting item ${itemId} from wishlist ${wishlistId} by user ${uid}`);
   
   // Check if user can edit this wishlist
-  if (!(await canEditWishlist(uid, wishlistId))) {
+  const canEdit = await canEditWishlist(uid, wishlistId);
+  console.log(`User ${uid} can edit wishlist ${wishlistId}:`, canEdit);
+  
+  if (!canEdit) {
     return res.status(403).json({ error: 'insufficient permissions' });
   }
   
-  await pool.query(
-    'DELETE FROM wishlist_item WHERE id=$1 AND wishlist_id=$2',
-    [req.params.itemId, wishlistId]
-  );
-  res.status(204).end();
+  try {
+    const result = await pool.query(
+      'DELETE FROM wishlist_item WHERE id=$1 AND wishlist_id=$2',
+      [itemId, wishlistId]
+    );
+    console.log(`Deleted ${result.rowCount} items`);
+    res.status(204).end();
+  } catch (e) {
+    console.error('Error deleting item:', e);
+    res.status(400).json({ error: e.message });
+  }
 }));
 
 // ===== COLLABORATION ENDPOINTS =====
@@ -279,6 +278,7 @@ app.get('/access/mine', wrap(async (req, res) => {
 }));
 
 // GET /wishlists/:id/access - Get list of collaborators for a wishlist with user enrichment
+// Note: This only returns collaborators from wishlist_access table, not the owner
 app.get('/wishlists/:id/access', wrap(async (req, res) => {
   const uid = userId(req);
   const wishlistId = req.params.id;
@@ -289,30 +289,15 @@ app.get('/wishlists/:id/access', wrap(async (req, res) => {
     return res.status(403).json({ error: 'only owner can view access list' });
   }
   
+  // Only return collaborators from wishlist_access table (owners are not stored here)
   const { rows } = await pool.query(`
     SELECT user_id, role, display_name 
     FROM wishlist_access 
     WHERE wishlist_id=$1
   `, [wishlistId]);
   
-  // Enrich with user data from user service
-  const enrichedAccess = await Promise.all(
-    rows.map(async (access) => {
-      try {
-        const user = await userServiceClient.getUserById(access.user_id);
-        return {
-          ...access,
-          user: user || { id: access.user_id, public_name: access.display_name }
-        };
-      } catch (error) {
-        console.error(`Failed to enrich access ${access.user_id} with user data:`, error);
-        return {
-          ...access,
-          user: { id: access.user_id, public_name: access.display_name }
-        };
-      }
-    })
-  );
+  // Return access list without enrichment (enrichment handled by API Gateway)
+  const enrichedAccess = rows;
   
   res.json(enrichedAccess);
 }));
@@ -352,20 +337,8 @@ app.get('/invites/:token', wrap(async (req, res) => {
     return res.status(404).json({ error: 'invite not found or expired' });
   }
   
-  // Enrich with owner data
-  try {
-    const owner = await userServiceClient.getUserById(rows[0].owner_id);
-    res.json({
-      ...rows[0],
-      owner: owner || { id: rows[0].owner_id, public_name: 'Unknown User' }
-    });
-  } catch (error) {
-    console.error('Failed to enrich invite with owner data:', error);
-    res.json({
-      ...rows[0],
-      owner: { id: rows[0].owner_id, public_name: 'Unknown User' }
-    });
-  }
+  // Return invite without enrichment (enrichment handled by API Gateway)
+  res.json(rows[0]);
 }));
 
 // POST /invites/:token/accept - Accept an invitation

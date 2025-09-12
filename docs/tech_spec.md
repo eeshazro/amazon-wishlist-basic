@@ -135,7 +135,7 @@ api-gateway - Authentication, routing, data enrichment
 Apply DB changes from Migration Guide and ERD:
 - Add `collab.wishlist_item_comment`
 - Add `access_type` (VARCHAR) to `collab.wishlist_invite`
-- Ensure `collab.wishlist_access` supports roles: owner, view_edit, view_only, comment_only
+- Ensure `collab.wishlist_access` supports roles: view_edit, view_only, comment_only (owners have inherent access via wishlist.owner_id)
 
 Indexes to add (from ERD):
 - `idx_wishlist_item_comment_item` on `wishlist_item_id`
@@ -172,7 +172,7 @@ Response error contract:
 
 ### Service Responsibilities
 collaboration-service
-- Validate permissions based on `wishlist_access` and owner
+- Validate permissions based on `wishlist_access` and wishlist ownership
 - Implement comment CRUD (create, list, delete) with ownership checks
 - Manage invitations: issue, read, accept (map `access_type` → `role`)
 - Update roles (PUT) with validation (only owner allowed)
@@ -216,7 +216,7 @@ user-service
 - Gateway → collab list comments → enrich each with `user` profile
 
 6) Update Role
-- Owner triggers PUT → collab validates owner → updates `wishlist_access.role`
+- Owner triggers PUT → collab validates ownership → updates `wishlist_access.role`
 
 ### Validation & Error Handling
 - Auth required on all non-public endpoints (JWT via gateway)

@@ -22,11 +22,12 @@ INSERT INTO wishlist_item (product_id, wishlist_id, title, priority, added_by) V
 (1, 1, 'Noise-cancelling Headphones', 1, 1),
 (12, 1, 'Smart Watch', 2, 1),
 (9, 2, 'Coffee Maker', 1, 1),
-(21, 3, 'Monitor Arm', 1, 2),
+(20, 3, 'Monitor Arm', 1, 2),
 (16, 3, 'Gaming Chair', 2, 2)
 ON CONFLICT DO NOTHING;
 
 -- Sample collaboration access (view-only)
+-- Note: Owners are not stored in access table as they have inherent access via wishlist.owner_id
 INSERT INTO wishlist_access (wishlist_id, user_id, role, invited_by, display_name) VALUES
 (1, 2, 'view_only', 1, 'Bob'),
 (1, 3, 'view_only', 1, 'Carol')

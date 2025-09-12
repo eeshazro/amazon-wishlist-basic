@@ -108,12 +108,12 @@ erDiagram
   - `created_at`: Creation timestamp
 
 #### `wishlist_access`
-- **Purpose**: Manages user access permissions
+- **Purpose**: Manages user access permissions for collaborators
 - **Owner**: Wishlist service
 - **Key Fields**:
   - `wishlist_id`: Foreign key to wishlist (part of composite PK)
   - `user_id`: External user ID (part of composite PK)
-  - `role`: Access role (owner, view_only)
+  - `role`: Access role (view_only) - owners have inherent access via wishlist.owner_id
   - `display_name`: Custom display name for the user in this wishlist
 
 #### `wishlist_invite`
@@ -184,13 +184,8 @@ wishlist_item: [
   }
 ]
 
--- Access permissions
+-- Access permissions (owners not stored here - they have inherent access via wishlist.owner_id)
 wishlist_access: [
-  {
-    wishlist_id: 1,
-    user_id: 1,     -- Alice (owner)
-    role: "owner"
-  },
   {
     wishlist_id: 1,
     user_id: 2,     -- Bob (from user service)

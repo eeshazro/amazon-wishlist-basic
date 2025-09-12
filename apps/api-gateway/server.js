@@ -6,6 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import fetch from 'node-fetch';
+import { userServiceClient, productServiceClient } from './src/serviceClients.js';
 
 // Initialize Express application
 const app = express();
@@ -121,7 +122,7 @@ app.get('/categories', wrap(async (req, res) => {
 // WISHLIST ROUTES (Proxy to wishlist service with data enrichment)
 // =============================================================================
 
-// GET /api/wishlists/mine - Get user's wishlists
+// GET /api/wishlists/mine - Get user's wishlists with owner enrichment
 app.get('/api/wishlists/mine', wrap(async (req, res) => {
   try {
     const response = await fetch(`${WISHLIST_URL}/wishlists/mine`, {
@@ -136,7 +137,25 @@ app.get('/api/wishlists/mine', wrap(async (req, res) => {
     }
     
     const wishlists = await response.json();
-    res.json(wishlists);
+    
+    // Enrich wishlists with owner information
+    const enrichedWishlists = await Promise.all(wishlists.map(async (wishlist) => {
+      try {
+        const owner = await userServiceClient.getUserById(wishlist.owner_id);
+        return {
+          ...wishlist,
+          owner: owner || { id: wishlist.owner_id, public_name: 'Unknown User' }
+        };
+      } catch (error) {
+        console.error(`Error fetching owner ${wishlist.owner_id}:`, error);
+        return {
+          ...wishlist,
+          owner: { id: wishlist.owner_id, public_name: 'Unknown User' }
+        };
+      }
+    }));
+    
+    res.json(enrichedWishlists);
   } catch (error) {
     console.error('Wishlists proxy error:', error);
     res.status(500).json({ error: 'Wishlist service unavailable' });
@@ -178,14 +197,25 @@ app.get('/api/wishlists/friends', wrap(async (req, res) => {
     
     const wishlists = await wishlistsResponse.json();
     
-    // Enrich wishlists with access role information
-    const enrichedWishlists = wishlists.map(wishlist => {
+    // Enrich wishlists with access role information and owner details
+    const enrichedWishlists = await Promise.all(wishlists.map(async (wishlist) => {
       const access = accessList.find(a => a.wishlist_id === wishlist.id);
+      
+      // Get owner information
+      let owner = null;
+      try {
+        owner = await userServiceClient.getUserById(wishlist.owner_id);
+      } catch (error) {
+        console.error(`Error fetching owner ${wishlist.owner_id}:`, error);
+        owner = { id: wishlist.owner_id, public_name: 'Unknown User' };
+      }
+      
       return {
         ...wishlist,
-        role: access ? access.role : 'view_only'
+        role: access ? access.role : 'view_only',
+        owner: owner || { id: wishlist.owner_id, public_name: 'Unknown User' }
       };
-    });
+    }));
     
     res.json(enrichedWishlists);
   } catch (error) {
@@ -194,7 +224,7 @@ app.get('/api/wishlists/friends', wrap(async (req, res) => {
   }
 }));
 
-// GET /api/wishlists/:id/access - Get wishlist access list
+// GET /api/wishlists/:id/access - Get wishlist access list with user enrichment
 app.get('/api/wishlists/:id/access', wrap(async (req, res) => {
   try {
     const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}/access`, {
@@ -205,8 +235,30 @@ app.get('/api/wishlists/:id/access', wrap(async (req, res) => {
       }
     });
     
-    const data = await response.json();
-    res.status(response.status).json(data);
+    if (!response.ok) {
+      return res.status(response.status).json(await response.json());
+    }
+    
+    const accessList = await response.json();
+    
+    // Enrich access list with user profiles
+    const enrichedAccessList = await Promise.all(accessList.map(async (access) => {
+      try {
+        const user = await userServiceClient.getUserById(access.user_id);
+        return {
+          ...access,
+          user: user || { id: access.user_id, public_name: 'Unknown User' }
+        };
+      } catch (error) {
+        console.error(`Error fetching user ${access.user_id}:`, error);
+        return {
+          ...access,
+          user: { id: access.user_id, public_name: 'Unknown User' }
+        };
+      }
+    }));
+    
+    res.json(enrichedAccessList);
   } catch (error) {
     console.error('Get access list proxy error:', error);
     res.status(500).json({ error: 'Wishlist service unavailable' });
@@ -236,7 +288,7 @@ app.delete('/api/wishlists/:id/access/:userId', wrap(async (req, res) => {
   }
 }));
 
-// GET /api/wishlists/:id - Get specific wishlist
+// GET /api/wishlists/:id - Get specific wishlist with owner enrichment
 app.get('/api/wishlists/:id', wrap(async (req, res) => {
   try {
     const response = await fetch(`${WISHLIST_URL}/wishlists/${req.params.id}`, {
@@ -251,6 +303,38 @@ app.get('/api/wishlists/:id', wrap(async (req, res) => {
     }
     
     const wishlist = await response.json();
+    
+    // Enrich wishlist with owner information
+    try {
+      const owner = await userServiceClient.getUserById(wishlist.owner_id);
+      wishlist.owner = owner || { id: wishlist.owner_id, public_name: 'Unknown User' };
+    } catch (error) {
+      console.error(`Error fetching owner ${wishlist.owner_id}:`, error);
+      wishlist.owner = { id: wishlist.owner_id, public_name: 'Unknown User' };
+    }
+    
+    // Enrich items with product data
+    if (wishlist.items && Array.isArray(wishlist.items)) {
+      const enrichedItems = await Promise.all(wishlist.items.map(async (item) => {
+        try {
+          const product = await productServiceClient.getProductById(item.product_id);
+          if (product) {
+            return {
+              ...item,
+              product: product
+            };
+          } else {
+            console.log(`Product ${item.product_id} not found for item ${item.id}`);
+            return item;
+          }
+        } catch (error) {
+          console.error(`Error fetching product ${item.product_id} for item ${item.id}:`, error);
+          return item;
+        }
+      }));
+      wishlist.items = enrichedItems;
+    }
+    
     res.json(wishlist);
   } catch (error) {
     console.error('Wishlist detail proxy error:', error);
@@ -275,12 +359,11 @@ app.get('/api/wishlists/:id/items', wrap(async (req, res) => {
     
     const items = await itemsResponse.json();
     
-    // Enrich items with product data from mock services
+    // Enrich items with product data using service client
     const enrichedItems = await Promise.all(items.map(async (item) => {
       try {
-        const productResponse = await fetch(`${MOCK_SERVICES_URL}/products/${item.product_id}`);
-        if (productResponse.ok) {
-          const product = await productResponse.json();
+        const product = await productServiceClient.getProductById(item.product_id);
+        if (product) {
           return { ...item, product };
         } else {
           console.error(`Product not found: ${item.product_id}`);

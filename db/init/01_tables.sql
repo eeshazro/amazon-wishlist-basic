@@ -32,11 +32,12 @@ CREATE TABLE IF NOT EXISTS wishlist_item (
 );
 
 -- Wishlist access control (basic collaboration features)
+-- Note: Owners are not stored here as they have inherent access via wishlist.owner_id
 CREATE TABLE IF NOT EXISTS wishlist_access (
     wishlist_id INTEGER NOT NULL REFERENCES wishlist(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL, -- References external user service
     role VARCHAR(20) NOT NULL DEFAULT 'view_only' 
-        CHECK (role IN ('owner', 'view_only')),
+        CHECK (role IN ('view_only')),
     invited_by INTEGER, -- References external user service
     invited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     display_name VARCHAR(255),

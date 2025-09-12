@@ -114,13 +114,13 @@ export default function AmazonItemCard({ item, auth, wid, canDelete, onDelete })
 
           {/* By Line */}
           <div className="amazon-item-byline">
-            by {itemData.retailer} ({itemData.category})
+            by {item.product?.retailer || itemData.retailer} ({item.product?.category || itemData.category})
           </div>
 
           {/* Rating */}
           <div className="amazon-item-rating">
-            {renderStars(itemData.rating)}
-            <a href="#" className="amazon-rating-count">{itemData.ratingCount}</a>
+            {renderStars(item.product?.rating || itemData.rating)}
+            <a href="#" className="amazon-rating-count">{item.product?.review_count || itemData.ratingCount}</a>
           </div>
 
           {/* Price */}

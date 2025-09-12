@@ -5,7 +5,7 @@ This guide outlines all the tasks required to implement the full collaborative w
 ## 🎯 Overview
 
 After the migration, you'll have:
-- ✅ Database schema with comments, simplified roles (owner, edit, view_only), and access types
+- ✅ Database schema with comments, simplified roles (edit, view_only), and access types (owners have inherent access)
 - ✅ Sample data demonstrating all features
 - ❌ API endpoints for new features
 - ❌ Frontend components for collaboration
@@ -168,7 +168,7 @@ function filterItemsByRole(items, userRole) {
 
 // Filter access list based on user permissions
 function filterAccessListByRole(accessList, userRole) {
-  // Only owners can see full access list
+  // Only owners can see full access list (owners have inherent access via wishlist.owner_id)
   // Others see limited information
 }
 ```
